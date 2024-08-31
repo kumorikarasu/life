@@ -29,21 +29,20 @@ async function requestPermission() {
 }
 requestPermission();
 
+export let data;
+$: data.saveData(data);
 </script>
 
 <main>
-<div class="navbar bg-base-100">
-<a href="/" class="btn btn-ghost text-xl">Sim Bruna</a>
-</div>
-
-<div class="container mx-auto">
-
-  <div class="grid grid-cols-1 gap-8 px-4">
-        <Range name="Energy" />
-        <Range name="Hunger" />
-        <Range name="Fun" />
-        <Range name="Social" />
-        <Range name="Hygiene" />
+  <div class="navbar bg-base-100">
+    <a href="/" class="btn btn-ghost text-xl">Sim {data.sim.name}</a>
+  </div>
+  <div class="container mx-auto">
+    <div class="grid grid-cols-1 gap-8 px-4">
+      {#each data.sim.stats as [key, value]}
+      <Range name="{key}" bind:value={value}/>
+      {/each}
+    </div>
   </div>
 </main>
 

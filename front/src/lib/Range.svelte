@@ -1,11 +1,18 @@
 <script lang="ts">
   export let name: string
+  export let value: number
   let bg = '#333'
+
+  function getColor(val) {
+
+  }
+
+  $: bg = "hsl(" + (Math.round(value / 30) * 30) + ", 90%, 50%)"
 </script>
 
 <div>
 <p>{name}</p>
-<input type="range" min="0" max="100" value="40" class="range" />
+<input style="--range-shdw: {bg}" type="range" min="0" max="100" bind:value={value} class="range" />
 </div>
 
 <style>

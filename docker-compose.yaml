@@ -1,0 +1,63 @@
+
+services:
+  front-end:
+    tty: true
+    restart: always
+    build:
+      context: front/.
+      dockerfile: Dockerfile
+      target: dev
+    ports:
+      - "5173:5173"
+    links:
+      - api 
+    depends_on:
+      - api 
+    environment:
+      PORT: 5173
+      BACKEND_URL: http://api:8000
+    networks:
+      - default
+    volumes:
+      - ./front/src:/app/src
+      - ./front/svelte.config.js:/app/svelte.config.js
+      - ./front/tailwind.config.js:/app/tailwind.config.js
+      - ./front/tsconfig.json:/app/tsconfig.json
+      - ./front/postcss.config.js:/app/postcss.config.js
+        
+  api:
+    tty: true
+    restart: always
+    build:
+      context: api/.
+      dockerfile: Dockerfile
+      target: dev
+    ports:
+      - "8000:8000"
+    environment:
+      PORT: 8000
+      POSTGRES_URL: postgres://root:devpass@postgres:5432
+    networks:
+      - default
+    volumes:
+      - ./api/src:/usr/src/app/src
+
+# DB
+  postgres:
+    image: postgres:12
+    volumes:
+      - postgres-data:/data/db
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: devpass
+      POSTGRES_DB: 
+    ports:
+      - "5432:5432"
+    networks:
+      - default
+
+volumes:
+  postgres-data:
+networks:
+  default:
+    driver: bridge
