@@ -29,18 +29,18 @@ services:
     tty: true
     restart: always
     build:
-      context: api/.
+      context: back/api/.
       dockerfile: Dockerfile
       target: dev
     ports:
       - "8000:8000"
     environment:
       PORT: 8000
-      POSTGRES_URL: postgres://root:devpass@postgres:5432
+      POSTGRES_CONNECTION_STRING: ${DATABASE_URL}
     networks:
       - default
     volumes:
-      - ./api/src:/usr/src/app/src
+      - ./back/api/src:/usr/src/app/src
 
 # DB
   postgres:
