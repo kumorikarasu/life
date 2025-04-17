@@ -23,10 +23,24 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(SimStat::Table)
                     .if_not_exists()
-                    .col(pk_auto(SimStat::Id))
                     .col(integer(SimStat::SimId))
                     .col(string(SimStat::Name))
-                    .col(integer(SimStat::Value))
+                    .col(float(SimStat::Value))
+                    .col(ColumnDef::new(SimStat::DecayRate)
+                         .float()
+                         .null()
+                     )
+                    .col(ColumnDef::new(SimStat::Timestamp)
+                         .timestamp()
+                         .not_null()
+                         .default(SimpleExpr::Keyword(Keyword::CurrentTimestamp))
+                         )
+                    .primary_key(
+                        Index::create()
+                        .col(SimStat::SimId)
+                        .col(SimStat::Name)
+                        .primary(),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -66,8 +80,9 @@ enum Sim {
 #[derive(DeriveIden)]
 enum SimStat {
     Table,
-    Id,
     SimId,
     Name,
     Value,
+    DecayRate,
+    Timestamp,
 }

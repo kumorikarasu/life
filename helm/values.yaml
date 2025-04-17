@@ -4,6 +4,8 @@
 
 replicaCount: 1
 
+env: {}
+
 image:
   repository: "simbruna"
   pullPolicy: Always
@@ -79,6 +81,8 @@ readinessProbe:
   httpGet:
     path: /
     port: http
+
+
 
 autoscaling:
   enabled: false

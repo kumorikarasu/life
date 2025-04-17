@@ -3,15 +3,20 @@
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
 #[sea_orm(table_name = "sim_stat")]
 pub struct Model {
-    #[sea_orm(primary_key)]
+    #[sea_orm(primary_key, auto_increment = false)]
     #[serde(skip_deserializing)]
-    pub id: i32,
     pub sim_id: i32,
+    #[sea_orm(primary_key, auto_increment = false)]
+    #[serde(skip_deserializing)]
     pub name: String,
-    pub value: i32,
+    #[sea_orm(column_type = "Float")]
+    pub value: f32,
+    #[sea_orm(column_type = "Float", nullable)]
+    pub decay_rate: Option<f32>,
+    pub timestamp: DateTime,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

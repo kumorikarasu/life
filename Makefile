@@ -1,6 +1,13 @@
+ifneq (,$(wildcard ./.env))
+    include .env
+    export
+endif
+
 build:
 	docker build --target prod -t registry.home.ryougi.ca/simbru-pwa front
 	docker push registry.home.ryougi.ca/simbru-pwa
+	docker build --target prod -t registry.home.ryougi.ca/simbru-api back/api
+	docker push registry.home.ryougi.ca/simbru-api
 
 helm-deploy:
 	helm upgrade --install simbru-pwa helm --namespace simbru-pwa --create-namespace \
@@ -12,12 +19,43 @@ helm-deploy:
 		--set ingress.hosts[0].paths[0].path=/ \
 		--set ingress.hosts[0].paths[0].pathType=ImplementationSpecific \
 
+	helm upgrade --install simbru-api helm --namespace simbru-pwa --create-namespace \
+		--set image.repository=registry.home.ryougi.ca/simbru-api \
+		--set image.tag=latest \
+		--set ingress.enabled=true \
+		--set ingress.className=nginx \
+		--set ingress.hosts[0].host=simbru-api.home.ryougi.ca \
+		--set ingress.hosts[0].paths[0].path=/ \
+		--set ingress.hosts[0].paths[0].pathType=ImplementationSpecific \
+		--set env.POSTGRES_CONNECTION_STRING=${DATABASE_URL} \
+		--set service.port=8000
+
 build-no-cache:
 	docker build --target prod -t registry.home.ryougi.ca/simbru-pwa front --no-cache
 	docker push registry.home.ryougi.ca/simbru-pwa
 
 
 deploy: build helm-deploy
+
+psql:
+	psql ${DATABASE_URL}
+
+migrate: seed refresh-db insert
+
+seed:
+	@psql ${DATABASE_URL} -c "COPY (SELECT * FROM sim) TO STDOUT WITH CSV HEADER" > back/data/sim.csv
+	@psql ${DATABASE_URL} -c "COPY (SELECT * FROM sim_stat) TO STDOUT WITH CSV HEADER" > back/data/sim_stat.csv
+
+insert:
+	@psql ${DATABASE_URL} -c "COPY sim FROM STDIN WITH CSV HEADER" < back/data/sim.csv
+	@psql ${DATABASE_URL} -c "COPY sim_stat FROM STDIN WITH CSV HEADER" < back/data/sim_stat.csv
+
+refresh-db:
+	cd back && \
+	sea-orm-cli migrate refresh && \
+	sea-orm-cli generate entity --with-serde both --serde-skip-deserializing-primary-key -o api/src/entities
+
+	
 
 decrypt:
 	@echo "Decrypting secrets for deployment"

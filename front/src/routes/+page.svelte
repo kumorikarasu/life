@@ -30,7 +30,7 @@ async function requestPermission() {
 requestPermission();
 
 export let data;
-$: data.saveData(data);
+$: data.saveData(data.sim);
 </script>
 
 <main>
@@ -39,8 +39,8 @@ $: data.saveData(data);
   </div>
   <div class="container mx-auto">
     <div class="grid grid-cols-1 gap-8 px-4">
-      {#each data.sim.stats as [key, value]}
-      <Range name="{key}" bind:value={value}/>
+      {#each data.sim.stats as stat }
+      <Range name="{stat.name}" bind:value={stat.value}/>
       {/each}
     </div>
   </div>

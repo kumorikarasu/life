@@ -13,6 +13,7 @@ pub fn service(db: DatabaseConnection) -> SimService {
 pub fn configure(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(controller::get_sim)
        .service(controller::post_sim)
-       .service(controller::post_stat);
+       .service(controller::post_stat)
+       .service(controller::delete_stat);
 }
 
