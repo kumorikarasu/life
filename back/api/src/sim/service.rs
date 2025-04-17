@@ -19,14 +19,18 @@ impl SimService {
 
     pub async fn setup(&self) -> Result<(), sea_orm::DbErr> {
         // Setup a tokio task that will run the decay function every minute or so
+        /*
         actix_web::rt::spawn(async move {
             loop {
                 actix_web::rt::time::sleep(std::time::Duration::from_secs(60)).await;
                 SimService::run_decay().await.unwrap();
             }
         });
+        */
+        Ok(())
     }
 
+    /*
     pub async fn run_decay() -> Result<(), sea_orm::DbErr> {
         let stats = sim_stat::Entity::find()
             .all(&self.db)
@@ -35,6 +39,7 @@ impl SimService {
 
         Ok(())
     }
+    */
 
     pub async fn get_sim(&self, id: u64) -> Result<crate::dto::sim::Model, sea_orm::DbErr> {
         //Sim::find().find_with_related(Stat).where_column(Sim::Id, id).one(&self.db).unwrap()

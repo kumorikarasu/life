@@ -24,12 +24,14 @@ async fn main() -> std::io::Result<()> {
 
 
     // Setup a tokio task that will run the decay function every minute or so
+    /*
     actix_web::rt::spawn(async move {
         loop {
             actix_web::rt::time::sleep(std::time::Duration::from_secs(60)).await;
             s.run_decay(60.0).await.unwrap();
         }
     });
+    */
 
 
     HttpServer::new(move || {
