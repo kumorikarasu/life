@@ -4,7 +4,10 @@
 
 replicaCount: 1
 
-env: {}
+env: 
+  OAUTH_CLIENT_ID: ""
+  OAUTH_CLIENT_SECRET: ""
+  OAUTH_REDIRECT_URL: "https://your-domain.com/auth/callback"
 
 image:
   repository: "simbruna"

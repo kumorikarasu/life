@@ -5,11 +5,13 @@ use actix_cors::Cors;
 use actix_web::get;
 #[allow(unused)]
 
-use actix_web::{App, HttpServer, web};
+use actix_web::{App, HttpServer, web, middleware::Logger};
 mod entities;
 mod sim;
 mod dto;
+mod auth;
 
+use auth::middleware::AuthMiddleware;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -19,30 +21,40 @@ async fn main() -> std::io::Result<()> {
     // Setup DB Connections
     let db = db_setup().await;
 
-    // No idea how to get around this for now
-    let s = sim::service(db);
+    // Initialize services
+    let sim_service = sim::service(db.clone());
+    let auth_service = auth::service(db);
 
-
-    // Setup a tokio task that will run the decay function every minute or so
+    // Setup a tokio task that will run the decay function every minute
     /*
     actix_web::rt::spawn(async move {
         loop {
             actix_web::rt::time::sleep(std::time::Duration::from_secs(60)).await;
-            s.run_decay(60.0).await.unwrap();
+            sim_service_clone.run_decay(60.0).await.unwrap();
         }
     });
     */
 
-
     HttpServer::new(move || {
-        // let cors = Cors::default().allow_any_origin().allowed_methods(vec!["GET", "POST", "PUT", "DELETE", "OPTIONS"]).send_wildcard();
         let cors = Cors::permissive();
         App::new()
             .wrap(cors)
+            .wrap(Logger::default())
             .service(default)
-            .service(web::scope("api/v1/sim")
-                .app_data(web::Data::new(s.clone()))
-                .configure(sim::configure))
+            .service(
+                web::scope("api/v1")
+                    .service(
+                        web::scope("/auth")
+                            .app_data(web::Data::new(auth_service.clone()))
+                            .configure(auth::configure)
+                    )
+                    .service(
+                        web::scope("/sim")
+                            .wrap(AuthMiddleware::new())  // Note the () here
+                            .app_data(web::Data::new(sim_service.clone()))
+                            .configure(sim::configure)
+                    )
+            )
     })
     .bind(("0.0.0.0", 8000))?
     .run()
