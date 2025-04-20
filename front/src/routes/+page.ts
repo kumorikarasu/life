@@ -28,6 +28,7 @@ export async function load({fetch} ) : Promise<any> {
 
   let sim = null;
   if (authState.isAuthenticated) {
+    console.log('Authenticated');
     const req = await fetchWithAuth(`http://${import.meta.env.VITE_API_ENDPOINT}/api/v1/sim/1`);
     if (req.ok) {
       sim = await req.json();

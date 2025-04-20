@@ -4,3 +4,4 @@ pub mod prelude;
 
 pub mod sim;
 pub mod sim_stat;
+pub mod user;

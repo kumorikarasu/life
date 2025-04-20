@@ -45,13 +45,10 @@ export const handleCallback = async (code: string, state: string) => {
           credentials: 'include'
       }
   );
-  /*
-  console.log(JSON.stringify(response));
   if (response.ok) {
       const token = await response.text();
       auth.login(token);
       return true;
   }
-  */
   return true;
 };
