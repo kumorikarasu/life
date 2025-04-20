@@ -1,13 +1,26 @@
 use actix_session::Session;
 use actix_web::{get, post, web, HttpResponse, Responder, Result};
 use oauth2::{AuthorizationCode, CsrfToken};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use super::service::AuthService;
 
 #[derive(Deserialize)]
 pub struct AuthRequest {
     code: String,
     state: String,
+}
+
+#[derive(Serialize)]
+pub struct AuthResponse {
+    token: String,
+    user: UserResponse,
+}
+
+#[derive(Serialize)]
+pub struct UserResponse {
+    name: String,
+    email: String,
+    picture: Option<String>,
 }
 
 #[get("/login")]
@@ -32,14 +45,25 @@ pub async fn callback(
     println!("Session {:?}", session.entries());
     session.insert("test_value", "test_value").unwrap();
     
-    match service.auth(code, state, session).await {
+    match service.auth(code, state, session.clone()).await {
         Ok(token) => {
             println!("Token: {}", token);
-            // In a real application, you'd want to:
-            // 1. Create a session or JWT
-            // 2. Set it in a cookie
-            // 3. Redirect to the frontend
-            Ok(HttpResponse::Ok().body(token))
+            
+            // Get user data from session
+            let name = session.get::<String>("user_name").unwrap().unwrap_or_default();
+            let email = session.get::<String>("user_email").unwrap().unwrap_or_default();
+            let picture = session.get::<String>("user_picture").unwrap();
+            
+            let response = AuthResponse {
+                token,
+                user: UserResponse {
+                    name,
+                    email,
+                    picture,
+                },
+            };
+            
+            Ok(HttpResponse::Ok().json(response))
         },
         Err(e) => Ok(HttpResponse::Ok().body(e)),
     }

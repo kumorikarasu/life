@@ -39,7 +39,10 @@ $: data.saveData(data.sim);
     <a href="/" class="btn btn-ghost text-xl">Sim {data?.sim?.name || ''}</a>
     <div class="flex-none">
       {#if $auth.isAuthenticated}
-        <button class="btn btn-ghost" on:click={() => auth.logout()}>Logout</button>
+        <div class="flex items-center gap-4">
+          <span class="text-sm font-medium">Welcome, {$auth.user?.name || 'User'}</span>
+          <button class="btn btn-ghost" on:click={() => auth.logout()}>Logout</button>
+        </div>
       {:else}
         <button class="btn btn-primary" on:click={login}>Login</button>
       {/if}
