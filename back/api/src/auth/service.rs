@@ -1,3 +1,4 @@
+use actix_session::Session;
 use oauth2::{
     basic::{self, BasicClient, BasicErrorResponseType, BasicTokenType}, AuthUrl, AuthorizationCode, Client, ClientId, ClientSecret, CsrfToken, EmptyExtraTokenFields, PkceCodeVerifier, RedirectUrl, Scope, StandardErrorResponse, StandardTokenIntrospectionResponse, StandardTokenResponse, TokenResponse, TokenUrl
 };
@@ -40,7 +41,7 @@ impl AuthService {
         }
     }
 
-    pub fn login(&self) -> (String, CsrfToken, PkceCodeVerifier) {
+    pub fn login(&self, session: Session) -> (String, CsrfToken, PkceCodeVerifier) {
         let (pkce_challenge, pkce_verifier) = oauth2::PkceCodeChallenge::new_random_sha256();
 
         let (auth_url, csrf_token) = self.oauth_client.clone()
@@ -50,22 +51,29 @@ impl AuthService {
             .set_pkce_challenge(pkce_challenge)
             .url();
         
-        // Store the PKCE verifier in a session or database for later use
-        //self.verifiers.push(pkce_verifier);
+        session.insert("pkce_verifier", pkce_verifier.secret()).unwrap();
+        session.insert("csrf_token", csrf_token.secret()).unwrap();
 
         (auth_url.to_string(), csrf_token, pkce_verifier)
     }
 
-    pub async fn auth(&self, code: AuthorizationCode, csrf_token: CsrfToken) -> Result<String, String> {
+    pub async fn auth(&self, code: AuthorizationCode, csrf_token: CsrfToken, session: Session) -> Result<String, String> {
         // Verify the CSRF token
         // In a real application, you'd want to check this against a session or database
         println!("CSRF Token: {}", csrf_token.secret());
-        if csrf_token.secret() != "expected_csrf_token" {
-            return Err("Invalid CSRF token".to_string());
-        }
 
+        let p = session.get::<String>("pkce_verifier").unwrap();
+        let csrf_session = session.get::<String>("csrf_token").unwrap().unwrap();
+        let csrf_req = csrf_token.secret().to_string();
+
+        println!("Session PKCE Verifier: {:?}", p);
+        println!("Session CSRF Token: {:?}", csrf_session);
         println!("CSRF Token: {}", csrf_token.secret());
         println!("Code: {}", code.secret());
+
+        if csrf_req != csrf_session {
+            return Err("Invalid CSRF token".to_string());
+        }
 
         let http_client = reqwest::ClientBuilder::new()
         // Following redirects opens the client up to SSRF vulnerabilities.
@@ -76,9 +84,11 @@ impl AuthService {
         // Exchange the authorization code for an access token
         let token = self.oauth_client
             .exchange_code(code)
+            .set_pkce_verifier(PkceCodeVerifier::new(p.unwrap()))
             .request_async(&http_client)
             .await.unwrap();
 
+        println!("Token: {:?}", token);
         // Here you would typically:
         // 1. Get user info from Google using the access token
         // 2. Create or update user in your database

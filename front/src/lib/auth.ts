@@ -25,16 +25,14 @@ const createAuthStore = () => {
 export const auth = createAuthStore();
 
 export const login = async () => {
-    window.location.href = `http://${import.meta.env.VITE_API_ENDPOINT}/api/v1/auth/login`;
+  window.location.href = `http://${import.meta.env.VITE_API_ENDPOINT}/api/v1/auth/login`;
 };
 
 export const handleCallback = async (code: string, state: string) => {
   // If the endpoint is localhost, we need to change the URL to the local IP address
   var endpoint = import.meta.env.VITE_API_ENDPOINT;
-
-  if (endpoint.includes('localhost')) {
-    endpoint = "api:8000"
-  }
+  console.log('Callback');
+  console.log(import.meta.env.VITE_API_ENDPOINT);
 
   const response = await fetch(
       `http://${endpoint}/api/v1/auth/callback`,
@@ -43,14 +41,17 @@ export const handleCallback = async (code: string, state: string) => {
           headers: {
               'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ code, state })
+          body: JSON.stringify({ code, state }),
+          credentials: 'include'
       }
   );
+  /*
   console.log(JSON.stringify(response));
   if (response.ok) {
       const token = await response.text();
       auth.login(token);
       return true;
   }
-  return false;
+  */
+  return true;
 };

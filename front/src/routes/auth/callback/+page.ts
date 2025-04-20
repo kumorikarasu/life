@@ -1,3 +1,5 @@
+export const ssr = false;
+
 import { handleCallback } from '$lib/auth';
 import { redirect } from '@sveltejs/kit';
 
@@ -10,5 +12,5 @@ export const load = async ({ url }) => {
     }
 
     const success = await handleCallback(code, state);
-    throw redirect(303, success ? '/' : '/');
+    throw redirect(303, success ? '/' : '/login');
 };

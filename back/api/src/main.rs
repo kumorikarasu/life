@@ -2,7 +2,8 @@
 //trace_macros!(true);
 
 use actix_cors::Cors;
-use actix_web::get;
+use actix_session::{Session, SessionMiddleware};
+use actix_web::{cookie::Key, get};
 #[allow(unused)]
 
 use actix_web::{App, HttpServer, web, middleware::Logger};
@@ -17,6 +18,9 @@ use auth::middleware::AuthMiddleware;
 async fn main() -> std::io::Result<()> {
     std::env::set_var("RUST_LOG", "debug");
     env_logger::init();
+
+    // TODO: Load from env/config
+    let session_key = Key::from(b"r+7Ow+Ne6gArI3LnzoYTD+1WsiLzVaB09NSin1d2MlPfgldgxMw9QdxmP6E1WbfnUOi7qGK2vBgI4JlrTCo5N1f9");
 
     // Setup DB Connections
     let db = db_setup().await;
@@ -37,9 +41,12 @@ async fn main() -> std::io::Result<()> {
 
     HttpServer::new(move || {
         let cors = Cors::permissive();
+        let session_store = actix_session::storage::CookieSessionStore::default();
+
         App::new()
             .wrap(cors)
             .wrap(Logger::default())
+            .wrap(SessionMiddleware::new(session_store, session_key.clone()))
             .service(default)
             .service(
                 web::scope("api/v1")
@@ -62,8 +69,14 @@ async fn main() -> std::io::Result<()> {
 }
 
 #[get("/")]
-async fn default() -> &'static str {
-    "Hello world!"
+async fn default(session: Session) -> String {
+    let g = session.get::<String>("csrf_token").unwrap().unwrap_or("None".to_string());
+    println!("Session {:?}", session.entries());
+
+    println!("Session key: {:?}", g);
+
+    //session.insert("key", "value").unwrap();
+    format!("Hello world! {:?}", g)
 }
 
 async fn db_setup() -> sea_orm::DatabaseConnection {
