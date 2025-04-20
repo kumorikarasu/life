@@ -6,6 +6,7 @@ use actix_web::{get, post, delete, web::Data, Result, web::Path, Responder, web:
 use crate::dto::sim_stat::Model as SimStat;
 use crate::entities::sim::Model as Sim;
 use crate::sim::service::SimService;
+use crate::auth::middleware::AuthenticatedUser;
 
 #[get("{id}")]
 pub async fn get_sim(service: Data<SimService>, path: Path<u64>) -> Result<impl Responder> {
@@ -16,9 +17,29 @@ pub async fn get_sim(service: Data<SimService>, path: Path<u64>) -> Result<impl 
    }
 }
 
+#[get("user/{user}")]
+pub async fn get_user_sims(service: Data<SimService>, path: Path<i32>) -> Result<impl Responder> {
+    let id = path.into_inner();
+   match service.get_user_sims(id).await {
+       Ok(sims) => Ok(Json(sims)),
+       Err(_) => Err(error::ErrorInternalServerError("Failed to retrieve user simulations"))
+   }
+}
+
+#[get("user")]
+pub async fn get_logged_in_user_sims(service: Data<SimService>, user: AuthenticatedUser) -> Result<impl Responder> {
+   match service.get_user_sims(user.id).await {
+       Ok(sims) => Ok(Json(sims)),
+       Err(_) => Err(error::ErrorInternalServerError("Failed to retrieve user simulations"))
+   }
+}
+
 #[post("")]
-pub async fn post_sim(service: Data<SimService>, payload: Json<Sim>) -> Result<impl Responder> {
-    let sim = payload.into_inner();
+pub async fn post_sim(service: Data<SimService>, mut payload: Json<Sim>, user: AuthenticatedUser) -> Result<impl Responder> {
+    let mut sim = payload.into_inner();
+    // Set the user_id from the authenticated user
+    sim.user_id = user.id;
+    
     let save = service.post_sim(sim).await;
     if save.is_err() {
         return Err(error::ErrorBadRequest("Failed to save sim"));

@@ -10,17 +10,32 @@ pub struct Model {
     #[serde(skip_deserializing)]
     pub id: i32,
     pub name: String,
+    pub user_id: i32,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
     #[sea_orm(has_many = "super::sim_stat::Entity")]
     SimStat,
+    #[sea_orm(
+        belongs_to = "super::users::Entity",
+        from = "Column::UserId",
+        to = "super::users::Column::Id",
+        on_update = "NoAction",
+        on_delete = "Cascade"
+    )]
+    Users,
 }
 
 impl Related<super::sim_stat::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::SimStat.def()
+    }
+}
+
+impl Related<super::users::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Users.def()
     }
 }
 

@@ -56,13 +56,37 @@ impl SimService {
             Ok(crate::dto::sim::Model::new(
                 sim.0.id,
                 sim.0.name,
+                sim.0.user_id,
                 sim.1.iter().map(|stat| crate::dto::sim_stat::Model {
                     name: stat.name.to_owned(),
                     value: stat.value.to_owned(),
                     decay_rate: stat.decay_rate,
-                }).collect(
-            )))
+                }).collect()
+            ))
         }
+    }
+
+    pub async fn get_user_sims(&self, user_id: i32) -> Result<Vec<crate::dto::sim::Model>, sea_orm::DbErr> {
+        let sims = Sim::find()
+            .find_with_related(Stat)
+            .filter(sim::Column::UserId.eq(user_id))
+            .all(&self.db)
+            .await?;
+
+        let result = sims.into_iter().map(|(sim, stats)| {
+            crate::dto::sim::Model::new(
+                sim.id,
+                sim.name,
+                sim.user_id,
+                stats.iter().map(|stat| crate::dto::sim_stat::Model {
+                    name: stat.name.to_owned(),
+                    value: stat.value.to_owned(),
+                    decay_rate: stat.decay_rate,
+                }).collect()
+            )
+        }).collect();
+
+        Ok(result)
     }
 
     pub async fn post_sim(&self, sim: sim::Model) -> Result<sim::Model, sea_orm::DbErr>{
@@ -77,6 +101,7 @@ impl SimService {
         sim::ActiveModel {
             id,
             name: Set(sim.name.to_owned()),
+            user_id: Set(sim.user_id),
         }.save(&self.db).await.unwrap().try_into_model()
     }
 

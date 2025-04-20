@@ -143,8 +143,8 @@ impl AuthService {
     
     /// Create or update a user in the database using Google user information
     async fn create_or_update_user(&self, user_info: &GoogleUserInfo) -> Result<String, String> {
-        use crate::entities::user::{Entity as User, ActiveModel};
-        use crate::entities::user::Column;
+        use crate::entities::users::{Entity as User, ActiveModel};
+        use crate::entities::users::Column;
         use sea_orm::IntoActiveModel;
         
         // Check if user already exists

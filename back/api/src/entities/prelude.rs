@@ -2,4 +2,4 @@
 
 pub use super::sim::Entity as Sim;
 pub use super::sim_stat::Entity as SimStat;
-pub use super::user::Entity as User;
+pub use super::users::Entity as Users;
