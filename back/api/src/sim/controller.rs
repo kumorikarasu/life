@@ -8,6 +8,12 @@ use crate::entities::sim::Model as Sim;
 use crate::sim::service::SimService;
 use crate::auth::middleware::AuthenticatedUser;
 
+// Struct to represent the order update request
+#[derive(serde::Deserialize)]
+pub struct StatOrderUpdateRequest {
+    pub stat_orders: Vec<(String, i32)>,
+}
+
 #[get("{id}")]
 pub async fn get_sim(service: Data<SimService>, path: Path<u64>) -> Result<impl Responder> {
    let id = path.into_inner();
@@ -77,6 +83,17 @@ pub async fn update_stat(service: Data<SimService>, path: Path<(u64, String)>, p
         return Err(error::ErrorBadRequest("Failed to update stat"));
     } else {
         return Ok(Json(update.unwrap()));
+    }
+}
+
+#[put("{id}/stats/order")]
+pub async fn update_stats_order(service: Data<SimService>, path: Path<u64>, payload: Json<StatOrderUpdateRequest>) -> Result<impl Responder> {
+    let sim_id = path.into_inner();
+    let order_request = payload.into_inner();
+    
+    match service.update_stats_order(sim_id, order_request.stat_orders).await {
+        Ok(_) => Ok(HttpResponse::Ok().finish()),
+        Err(_) => Err(error::ErrorBadRequest("Failed to update stats order"))
     }
 }
 

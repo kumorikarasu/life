@@ -17,6 +17,7 @@ pub struct Model {
     #[sea_orm(column_type = "Float", nullable)]
     pub decay_rate: Option<f32>,
     pub timestamp: DateTime,
+    pub order_index: i32,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

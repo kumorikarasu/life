@@ -1,5 +1,6 @@
 use sea_orm::sqlx::types::chrono::{DateTime, Utc};
 use sea_orm::*;
+use sea_query::Expr;
 
 // use crate::sim::entity::{ Sim, Stat };
 use crate::entities::{ sim, sim::Entity as Sim };
@@ -42,6 +43,7 @@ impl SimService {
             name: stat.name.to_owned(),
             value,
             decay_rate: stat.decay_rate,
+            order_index: stat.order_index,
         }
     }
 
@@ -108,6 +110,7 @@ impl SimService {
             value: Set(stat.value.to_owned()),
             decay_rate: Set(stat.decay_rate),
             timestamp: Set(Utc::now().naive_utc()),
+            order_index: Set(stat.order_index),
         };
 
         sim_stat::Entity::insert(sim)
@@ -117,6 +120,7 @@ impl SimService {
             .value(sim_stat::Column::Value, stat.value.to_owned())
             .value(sim_stat::Column::DecayRate, stat.decay_rate)
             .value(sim_stat::Column::Timestamp, Utc::now().naive_utc())
+            .value(sim_stat::Column::OrderIndex, stat.order_index)
             .to_owned())
         .exec(&self.db)
         .await?;
@@ -143,6 +147,7 @@ impl SimService {
         stat_model.value = Set(stat.value.to_owned());
         stat_model.decay_rate = Set(stat.decay_rate);
         stat_model.timestamp = Set(Utc::now().naive_utc());
+        stat_model.order_index = Set(stat.order_index);
         
         let updated_stat = stat_model.update(&self.db).await?;
         
@@ -150,6 +155,7 @@ impl SimService {
             name: updated_stat.name,
             value: updated_stat.value,
             decay_rate: updated_stat.decay_rate,
+            order_index: updated_stat.order_index,
         })
     }
 
@@ -180,6 +186,27 @@ impl SimService {
         if result.rows_affected == 0 {
             return Err(sea_orm::DbErr::RecordNotFound("Sim not found or does not belong to user".to_owned()));
         }
+        
+        Ok(())
+    }
+
+    // Update the order indices of multiple stats at once
+    pub async fn update_stats_order(&self, sim_id: u64, stat_orders: Vec<(String, i32)>) -> Result<(), sea_orm::DbErr> {
+        let sim_id = sim_id as i32;
+        
+        // Update each stat's order index in a transaction to ensure consistency
+        let txn = self.db.begin().await?;
+        
+        for (stat_name, order_index) in stat_orders {
+            sim_stat::Entity::update_many()
+                .col_expr(sim_stat::Column::OrderIndex, Expr::value(order_index))
+                .filter(sim_stat::Column::SimId.eq(sim_id))
+                .filter(sim_stat::Column::Name.eq(stat_name))
+                .exec(&txn)
+                .await?;
+        }
+        
+        txn.commit().await?;
         
         Ok(())
     }

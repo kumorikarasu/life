@@ -22,6 +22,77 @@ let statToDelete = '';
 let errorMessage = '';
 let successMessage = '';
 let loading = false;
+// Store stat order in this array
+let statOrder = [];
+
+// Update statOrder when data.sim.stats changes
+$: if (data?.sim?.stats && (!statOrder.length || statOrder.length !== data.sim.stats.length)) {
+  // Sort stats by order_index if available, otherwise use the order received from the backend
+  const sortedStats = [...data.sim.stats].sort((a, b) => {
+    // If both stats have order_index, sort by that
+    if (a.order_index !== undefined && b.order_index !== undefined) {
+      return a.order_index - b.order_index;
+    }
+    // Fall back to the order received from the backend
+    return 0;
+  });
+  
+  // Extract just the names for our statOrder array
+  statOrder = sortedStats.map(stat => stat.name);
+}
+
+// Function to reorder stats
+async function handleReorderStat(statName, direction, positions = 1) {
+  const currentIndex = statOrder.indexOf(statName);
+  if (currentIndex < 0) return;
+  
+  // Calculate the target index based on direction and positions to move
+  let newIndex;
+  if (direction === 'up') {
+    // Move up by the specified number of positions
+    newIndex = Math.max(0, currentIndex - positions);
+  } else if (direction === 'down') {
+    // Move down by the specified number of positions
+    newIndex = Math.min(statOrder.length - 1, currentIndex + positions);
+  } else {
+    // Invalid direction
+    return;
+  }
+  
+  // No need to reorder if the index hasn't changed
+  if (newIndex === currentIndex) return;
+  
+  // Create a new array for the updated order
+  const newOrder = [...statOrder];
+  
+  // Remove the stat from its current position
+  newOrder.splice(currentIndex, 1);
+  
+  // Insert it at the new position
+  newOrder.splice(newIndex, 0, statName);
+  
+  // Update the state
+  statOrder = newOrder;
+  
+  // Save the new order to the backend
+  saveStatOrder();
+}
+
+// Function to save the stat order to the backend
+async function saveStatOrder() {
+  // Create an array of [name, index] pairs
+  const orderData = statOrder.map((name, index) => [name, index]);
+  
+  // Call the API to update the order
+  try {
+    const success = await data.updateStatsOrder(data.sim.id, orderData);
+    if (!success) {
+      console.error('Failed to save stat order');
+    }
+  } catch (error) {
+    console.error('Error saving stat order:', error);
+  }
+}
 
 // Function to convert slider value (0-300) to decay rate (logarithmic scale)
 function getDecayRateFromSlider(sliderValue) {
@@ -342,9 +413,16 @@ function selectSuggestion(suggestion) {
         {/if}
         
         <div class="bg-base-100 rounded-lg shadow-md p-6 mb-6">
-          <h1 class="text-2xl font-bold mb-4">{data.sim.name}</h1>
           <div class="flex justify-between items-center mb-6">
-            <p class="text-base-content opacity-70">Sim ID: {data.sim.id}</p>
+            <div class="flex items-center gap-4">
+              <h1 class="text-2xl font-bold">{data.sim.name}</h1>
+              <p class="text-sm text-base-content opacity-80 italic flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                </svg>
+                Drag stats to reorder them
+              </p>
+            </div>
             <div class="flex gap-2">
               <button class="btn btn-primary btn-sm" on:click={openCreateStatModal}>
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -357,16 +435,24 @@ function selectSuggestion(suggestion) {
           </div>
           
           {#if data.sim.stats && data.sim.stats.length > 0}
-            <div class="grid grid-cols-1 gap-8 px-4">
-              {#each data.sim.stats as stat}
-                <Range 
-                  name={stat.name} 
-                  value={stat.value} 
-                  decay_rate={stat.decay_rate || 1/60}
-                  onEdit={openEditStatModal}
-                  onDelete={confirmDeleteStat}
-                  onValueChange={handleStatValueChange}
-                />
+            <div class="grid grid-cols-1 gap-3 px-4">
+              {#each statOrder as statName, index}
+                {#each data.sim.stats as stat}
+                  {#if stat.name === statName}
+                    <Range 
+                      name={stat.name} 
+                      value={stat.value} 
+                      decay_rate={stat.decay_rate || 1/60}
+                      onEdit={openEditStatModal}
+                      onDelete={confirmDeleteStat}
+                      onValueChange={handleStatValueChange}
+                      onReorder={handleReorderStat}
+                      draggable={true}
+                      index={index}
+                      totalStats={statOrder.length}
+                    />
+                  {/if}
+                {/each}
               {/each}
             </div>
           {:else}

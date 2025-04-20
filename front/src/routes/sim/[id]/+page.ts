@@ -8,6 +8,7 @@ type SimStat = {
   name: string;
   value: number;
   decay_rate: number | null;
+  order_index?: number;
 };
 
 type Sim = {
@@ -72,11 +73,18 @@ export async function load({ fetch, params }) {
       if (!authState.isAuthenticated) return null;
       
       try {
+        // Get the current number of stats to set the order index
+        let orderIndex = 0;
+        if (sim && sim.stats) {
+          orderIndex = sim.stats.length; // Place new stat at the end
+        }
+        
         // Create the new stat with the provided values or defaults
         const statData = { 
           name: statName, 
           value: initialValue, // Use the provided initial value
-          decay_rate: decayRate // Use the provided decay rate
+          decay_rate: decayRate, // Use the provided decay rate
+          order_index: orderIndex // Add it at the end of the list
         };
         
         const response = await fetchWithAuth(`http://${import.meta.env.VITE_API_ENDPOINT}/api/v1/sim/${simId}/stat`, {
@@ -140,6 +148,25 @@ export async function load({ fetch, params }) {
         return response.ok;
       } catch (error) {
         console.error('Error deleting stat:', error);
+        return false;
+      }
+    },
+    updateStatsOrder: async (simId: number, statOrders: Array<[string, number]>): Promise<boolean> => {
+      if (!authState.isAuthenticated) return false;
+      
+      try {
+        const response = await fetchWithAuth(`http://${import.meta.env.VITE_API_ENDPOINT}/api/v1/sim/${simId}/stats/order`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authState.token}`
+          },
+          body: JSON.stringify({ stat_orders: statOrders })
+        });
+        
+        return response.ok;
+      } catch (error) {
+        console.error('Error updating stats order:', error);
         return false;
       }
     }
