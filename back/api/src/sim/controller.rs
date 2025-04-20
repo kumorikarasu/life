@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 
 use actix_web::{HttpResponse, error};
-use actix_web::{get, post, delete, web::Data, Result, web::Path, Responder, web::Json};
+use actix_web::{get, post, delete, put, web::Data, Result, web::Path, Responder, web::Json};
 
 use crate::dto::sim_stat::Model as SimStat;
 use crate::entities::sim::Model as Sim;
@@ -58,6 +58,25 @@ pub async fn post_stat(service: Data<SimService>, path: Path<u64>, payload: Json
         return Err(error::ErrorBadRequest("Failed to save stat"));
     } else {
         return Ok(Json(save.unwrap()));
+    }
+}
+
+#[put("{id}/stat/{name}")]
+pub async fn update_stat(service: Data<SimService>, path: Path<(u64, String)>, payload: Json<SimStat>) -> Result<impl Responder> {
+    let (sim_id, name) = path.into_inner();
+    let stat = payload.into_inner();
+    
+    // Ensure the stat name in the path matches the one in the payload
+    if name != stat.name {
+        return Err(error::ErrorBadRequest("Stat name in URL must match stat name in payload"));
+    }
+    
+    let update = service.update_stat(sim_id, stat).await;
+
+    if update.is_err() {
+        return Err(error::ErrorBadRequest("Failed to update stat"));
+    } else {
+        return Ok(Json(update.unwrap()));
     }
 }
 

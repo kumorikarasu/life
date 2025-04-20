@@ -15,8 +15,8 @@
   }
 </script>
 
-<div class="navbar bg-base-100">
-  <a href="/" class="btn btn-ghost text-xl">
+<div class="navbar bg-primary text-primary-content shadow-lg">
+  <a href={simName ? `/sim/${simName.split(' ')[1]}` : "/"} class="btn btn-ghost text-xl">
     {#if simName}
       Sim {simName}
     {:else}

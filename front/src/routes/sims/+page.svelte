@@ -15,6 +15,7 @@ let successMessage = '';
 let deleteLoading = false;
 let simToDelete = null;
 let showDeleteConfirm = false;
+let showCreateModal = false; // New state variable to control the create sim modal
 
 // Function to refresh the token if needed
 async function refreshAuthIfNeeded() {
@@ -27,7 +28,10 @@ async function refreshAuthIfNeeded() {
 }
 
 // Function to handle creating a new sim
-async function handleCreateSim() {
+async function handleCreateSim(event) {
+  // Prevent default form submission behavior
+  event.preventDefault();
+  
   if (!newSimName.trim()) {
     errorMessage = 'Please enter a sim name';
     return;
@@ -53,6 +57,9 @@ async function handleCreateSim() {
       setTimeout(() => {
         successMessage = '';
       }, 5000);
+      
+      // Close the modal after successful creation
+      showCreateModal = false;
     } else {
       errorMessage = 'Failed to create sim. You may need to log out and log back in.';
     }
@@ -65,7 +72,7 @@ async function handleCreateSim() {
 }
 
 function navigateToSim(id: number) {
-  window.location.href = `/?sim=${id}`;
+  window.location.href = `/sim/${id}`;
 }
 
 function handleLogout() {
@@ -125,6 +132,19 @@ async function handleDeleteSim() {
 function toggleTheme() {
   theme.toggle();
 }
+
+// Function to open create modal
+function openCreateModal() {
+  errorMessage = '';
+  newSimName = '';
+  showCreateModal = true;
+}
+
+// Function to close create modal
+function closeCreateModal() {
+  showCreateModal = false;
+  errorMessage = '';
+}
 </script>
 
 <svelte:head>
@@ -135,70 +155,38 @@ function toggleTheme() {
   <Navbar />
   
   <div class="container mx-auto px-4 py-8">
-    <h1 class="text-3xl font-bold mb-8">Manage Your Sims</h1>
+    <div class="flex justify-between items-center mb-8">
+      <h1 class="text-3xl font-bold">Manage Your Sims</h1>
+      
+      {#if $auth.isAuthenticated}
+        <button class="btn btn-primary" on:click={openCreateModal}>
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+          </svg>
+          Create New Sim
+        </button>
+      {/if}
+    </div>
+    
+    {#if successMessage}
+      <div class="alert alert-success mb-6">
+        <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+        <span>{successMessage}</span>
+      </div>
+    {/if}
     
     {#if $auth.isAuthenticated}
-      <!-- Create Sim Form -->
-      <div class="bg-base-100 rounded-lg shadow-md p-6 mb-8">
-        <h2 class="text-xl font-semibold mb-4">Create New Sim</h2>
-        
-        {#if successMessage}
-          <div class="alert alert-success mb-4">
-            <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-            <span>{successMessage}</span>
-          </div>
-        {/if}
-        
-        <form on:submit|preventDefault={handleCreateSim} class="flex flex-col gap-4">
-          <div>
-            <label for="simName" class="block text-sm font-medium mb-1">Sim Name</label>
-            <input 
-              type="text" 
-              id="simName" 
-              bind:value={newSimName} 
-              placeholder="Enter sim name" 
-              class="input input-bordered w-full" 
-            />
-            {#if errorMessage}
-              <div class="alert alert-error mt-3 text-sm">
-                <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                <span>{errorMessage}</span>
-              </div>
-            {/if}
-          </div>
-          <div class="flex gap-4">
-            <button 
-              type="submit" 
-              class="btn btn-primary" 
-              disabled={loading || !newSimName.trim()}
-            >
-              {loading ? 'Creating...' : 'Create Sim'}
-            </button>
-            {#if errorMessage}
-              <button 
-                type="button" 
-                class="btn btn-outline" 
-                on:click={handleLogout}
-              >
-                Log Out and Try Again
-              </button>
-            {/if}
-          </div>
-        </form>
-      </div>
-      
       <!-- Sims List -->
       <div class="bg-base-100 rounded-lg shadow-md p-6">
         <h2 class="text-xl font-semibold mb-4">Your Sims</h2>
         
         {#if sims.length === 0}
-          <p class="text-base-content opacity-60 py-4">You don't have any sims yet. Create your first one above!</p>
+          <p class="text-base-content opacity-60 py-4">You don't have any sims yet. Click the "Create New Sim" button to get started!</p>
         {:else}
           <div class="overflow-x-auto">
             <table class="table w-full">
               <thead>
                 <tr>
-                  <th>ID</th>
                   <th>Name</th>
                   <th>Stats Count</th>
                   <th>Actions</th>
@@ -207,7 +195,6 @@ function toggleTheme() {
               <tbody>
                 {#each sims as sim}
                   <tr class="hover">
-                    <td>{sim.id}</td>
                     <td>{sim.name}</td>
                     <td>{sim.stats?.length || 0}</td>
                     <td class="flex gap-2">
@@ -238,6 +225,63 @@ function toggleTheme() {
       </div>
     {/if}
   </div>
+  
+  <!-- Create Sim Modal -->
+  {#if showCreateModal}
+    <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div class="bg-base-100 rounded-lg p-6 max-w-md w-full">
+        <h3 class="text-xl font-semibold mb-4">Create New Sim</h3>
+        
+        <form on:submit={handleCreateSim} class="flex flex-col gap-4">
+          <div>
+            <label for="simName" class="block text-sm font-medium mb-1">Sim Name</label>
+            <input 
+              type="text" 
+              id="simName" 
+              bind:value={newSimName} 
+              placeholder="Enter sim name" 
+              class="input input-bordered w-full" 
+              autofocus
+            />
+            {#if errorMessage}
+              <div class="alert alert-error mt-3 text-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <span>{errorMessage}</span>
+              </div>
+            {/if}
+          </div>
+          <div class="flex justify-end gap-3 mt-2">
+            <button 
+              type="button" 
+              class="btn btn-ghost" 
+              on:click={closeCreateModal}
+              disabled={loading}
+            >
+              Cancel
+            </button>
+            <button 
+              type="submit" 
+              class="btn btn-primary" 
+              disabled={loading || !newSimName.trim()}
+            >
+              {loading ? 'Creating...' : 'Create Sim'}
+            </button>
+          </div>
+          {#if errorMessage}
+            <div class="text-center">
+              <button 
+                type="button" 
+                class="btn btn-outline btn-sm mt-2" 
+                on:click={handleLogout}
+              >
+                Log Out and Try Again
+              </button>
+            </div>
+          {/if}
+        </form>
+      </div>
+    </div>
+  {/if}
   
   <!-- Delete Confirmation Modal -->
   {#if showDeleteConfirm}

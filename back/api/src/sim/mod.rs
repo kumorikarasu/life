@@ -16,6 +16,7 @@ pub fn configure(cfg: &mut actix_web::web::ServiceConfig) {
        .service(controller::get_user_sims)
        .service(controller::post_sim)
        .service(controller::post_stat)
+       .service(controller::update_stat)
        .service(controller::delete_stat)
        .service(controller::delete_sim);
 }

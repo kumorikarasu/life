@@ -18,28 +18,32 @@ impl SimService {
     }
 
     pub async fn setup(&self) -> Result<(), sea_orm::DbErr> {
-        // Setup a tokio task that will run the decay function every minute or so
-        /*
-        actix_web::rt::spawn(async move {
-            loop {
-                actix_web::rt::time::sleep(std::time::Duration::from_secs(60)).await;
-                SimService::run_decay().await.unwrap();
+        // No background decay process needed as we're applying decay on-the-fly
+        Ok(())
+    }
+
+    // Helper method to apply decay to a stat based on elapsed time
+    fn apply_decay(&self, stat: &sim_stat::Model) -> crate::dto::sim_stat::Model {
+        let now = Utc::now().naive_utc();
+        let elapsed_seconds = (now - stat.timestamp).num_seconds();
+        
+        let mut value = stat.value;
+        
+        // Apply decay if decay_rate is set and elapsed time is positive
+        if let Some(decay_rate) = stat.decay_rate {
+            if decay_rate > 0.0 && elapsed_seconds > 0 {
+                let decay_amount = decay_rate * elapsed_seconds as f32;
+                // Ensure value doesn't go below 0
+                value = (value - decay_amount).max(0.0);
             }
-        });
-        */
-        Ok(())
+        }
+        
+        crate::dto::sim_stat::Model {
+            name: stat.name.to_owned(),
+            value,
+            decay_rate: stat.decay_rate,
+        }
     }
-
-    /*
-    pub async fn run_decay() -> Result<(), sea_orm::DbErr> {
-        let stats = sim_stat::Entity::find()
-            .all(&self.db)
-            .await?;
-
-
-        Ok(())
-    }
-    */
 
     pub async fn get_sim(&self, id: u64) -> Result<crate::dto::sim::Model, sea_orm::DbErr> {
         //Sim::find().find_with_related(Stat).where_column(Sim::Id, id).one(&self.db).unwrap()
@@ -57,11 +61,7 @@ impl SimService {
                 sim.0.id,
                 sim.0.name,
                 sim.0.user_id,
-                sim.1.iter().map(|stat| crate::dto::sim_stat::Model {
-                    name: stat.name.to_owned(),
-                    value: stat.value.to_owned(),
-                    decay_rate: stat.decay_rate,
-                }).collect()
+                sim.1.iter().map(|stat| self.apply_decay(stat)).collect()
             ))
         }
     }
@@ -78,11 +78,7 @@ impl SimService {
                 sim.id,
                 sim.name,
                 sim.user_id,
-                stats.iter().map(|stat| crate::dto::sim_stat::Model {
-                    name: stat.name.to_owned(),
-                    value: stat.value.to_owned(),
-                    decay_rate: stat.decay_rate,
-                }).collect()
+                stats.iter().map(|stat| self.apply_decay(stat)).collect()
             )
         }).collect();
 
@@ -110,7 +106,7 @@ impl SimService {
             sim_id: Set(sim_id as i32),
             name: Set(stat.name.to_owned()),
             value: Set(stat.value.to_owned()),
-            decay_rate: Set(Some(0.0)),
+            decay_rate: Set(stat.decay_rate),
             timestamp: Set(Utc::now().naive_utc()),
         };
 
@@ -126,6 +122,35 @@ impl SimService {
         .await?;
 
         Ok(stat)
+    }
+
+    pub async fn update_stat(&self, sim_id: u64, stat: crate::dto::sim_stat::Model) -> Result<crate::dto::sim_stat::Model, sea_orm::DbErr> {
+        // Find the existing stat
+        let existing_stat = sim_stat::Entity::find()
+            .filter(sim_stat::Column::SimId.eq(sim_id as i32))
+            .filter(sim_stat::Column::Name.eq(stat.name.to_owned()))
+            .one(&self.db)
+            .await?;
+        
+        // Check if the stat exists
+        if existing_stat.is_none() {
+            return Err(sea_orm::DbErr::RecordNotFound(format!("Stat {} not found for sim {}", stat.name, sim_id)));
+        }
+        
+        // Update the stat
+        let mut stat_model: sim_stat::ActiveModel = existing_stat.unwrap().into();
+        
+        stat_model.value = Set(stat.value.to_owned());
+        stat_model.decay_rate = Set(stat.decay_rate);
+        stat_model.timestamp = Set(Utc::now().naive_utc());
+        
+        let updated_stat = stat_model.update(&self.db).await?;
+        
+        Ok(crate::dto::sim_stat::Model {
+            name: updated_stat.name,
+            value: updated_stat.value,
+            decay_rate: updated_stat.decay_rate,
+        })
     }
 
     pub async fn delete_stat(&self, sim_id: u64, name: String) -> Result<(), sea_orm::DbErr> {
