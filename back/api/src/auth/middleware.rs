@@ -8,6 +8,7 @@ use actix_session::SessionExt;
 use sea_orm::{ColumnTrait, QueryFilter, DatabaseConnection};
 use sea_orm::*;
 use crate::entities::users::{Entity as User, Column};
+use crate::AppState;
 
 pub struct AuthenticatedUser {
     pub id: i32,
@@ -32,13 +33,13 @@ impl FromRequest for AuthenticatedUser {
                 .ok_or_else(|| ErrorUnauthorized("Not authenticated"))?;
                 
             // Get a reference to the database
-            let app_data = req.app_data::<Data<DatabaseConnection>>()
-                .ok_or_else(|| ErrorUnauthorized("Database connection not available"))?;
+            let app_state = req.app_data::<Data<AppState>>()
+                .ok_or_else(|| ErrorUnauthorized("Application state not available"))?;
                 
             // Look up the user in the database
             let user = User::find()
                 .filter(Column::GoogleId.eq(google_id))
-                .one(app_data.get_ref())
+                .one(&app_state.db)
                 .await
                 .map_err(|_| ErrorUnauthorized("Database error"))?
                 .ok_or_else(|| ErrorUnauthorized("User not found"))?;
@@ -107,7 +108,7 @@ where
         match auth_header {
             Some(header) => {
                 if let Ok(auth_str) = header.to_str() {
-                    if auth_str.starts_with("Bearer ") {
+                    if (auth_str.starts_with("Bearer ")) {
                         let fut = self.service.call(req);
                         return Box::pin(async move {
                             let res = fut.await?;

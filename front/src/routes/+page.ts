@@ -1,23 +1,32 @@
-export const prerender = true;
+export const prerender = false;
 export const ssr = false;
 
 import { auth } from '$lib/auth';
 import { get } from 'svelte/store';
 
+type SimStat = {
+  name: string;
+  value: number;
+  decay_rate: number | null;
+};
+
 type Sim = {
-  name: string
-  stats: Array<{
-    name: string, 
-    value: string
-  }>
+  id: number;
+  name: string;
+  user_id: number;
+  stats: SimStat[];
 }
 
-export async function load({fetch} ) : Promise<any> {
+export async function load({ fetch, url }) {
   let saving = false;
   const authState = get(auth);
+  
+  // Get sim ID from URL query parameter
+  const simId = url.searchParams.get('sim') || '1';
 
   const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
     if (authState.isAuthenticated && authState.token) {
+      options.credentials = 'include';
       options.headers = {
         ...options.headers,
         'Authorization': `Bearer ${authState.token}`
@@ -28,15 +37,15 @@ export async function load({fetch} ) : Promise<any> {
 
   let sim = null;
   if (authState.isAuthenticated) {
-    console.log('Authenticated');
-    const req = await fetchWithAuth(`http://${import.meta.env.VITE_API_ENDPOINT}/api/v1/sim/1`);
+    console.log('Authenticated, loading sim:', simId);
+    const req = await fetchWithAuth(`http://${import.meta.env.VITE_API_ENDPOINT}/api/v1/sim/${simId}`);
     if (req.ok) {
       sim = await req.json();
     }
   }
 
   return {
-    sim: sim as Sim,
+    sim,
     saveData: async (data: Sim) => {
       if (!authState.isAuthenticated) return;
       

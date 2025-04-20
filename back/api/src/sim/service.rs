@@ -138,5 +138,26 @@ impl SimService {
         Ok(())
     }
 
+    pub async fn delete_sim(&self, sim_id: u64, user_id: i32) -> Result<(), sea_orm::DbErr> {
+        // First, delete all stats associated with this sim
+        sim_stat::Entity::delete_many()
+            .filter(sim_stat::Column::SimId.eq(sim_id as i32))
+            .exec(&self.db)
+            .await?;
+        
+        // Then delete the sim itself, ensuring it belongs to the correct user
+        let result = sim::Entity::delete_many()
+            .filter(sim::Column::Id.eq(sim_id as i32))
+            .filter(sim::Column::UserId.eq(user_id))
+            .exec(&self.db)
+            .await?;
+        
+        if result.rows_affected == 0 {
+            return Err(sea_orm::DbErr::RecordNotFound("Sim not found or does not belong to user".to_owned()));
+        }
+        
+        Ok(())
+    }
+
 }
 

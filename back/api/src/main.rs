@@ -13,6 +13,12 @@ mod dto;
 mod auth;
 
 use auth::middleware::AuthMiddleware;
+use sea_orm::DatabaseConnection;
+
+// App state to store shared resources
+pub struct AppState {
+    pub db: DatabaseConnection,
+}
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -25,9 +31,14 @@ async fn main() -> std::io::Result<()> {
     // Setup DB Connections
     let db = db_setup().await;
 
+    // Create app state with database connection
+    let app_state = web::Data::new(AppState {
+        db: db.clone(),
+    });
+
     // Initialize services
     let sim_service = sim::service(db.clone());
-    let auth_service = auth::service(db);
+    let auth_service = auth::service(db.clone());
 
     // Setup a tokio task that will run the decay function every minute
     /*
@@ -42,14 +53,17 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         let cors = Cors::permissive();
         let session_store = actix_session::storage::CookieSessionStore::default();
+        let app_state = app_state.clone();
 
         App::new()
             .wrap(cors)
             .wrap(Logger::default())
             .wrap(SessionMiddleware::new(session_store, session_key.clone()))
+            .app_data(app_state.clone())
             .service(default)
             .service(
                 web::scope("api/v1")
+                    .app_data(app_state.clone())
                     .service(
                         web::scope("/auth")
                             .app_data(web::Data::new(auth_service.clone()))
@@ -57,7 +71,7 @@ async fn main() -> std::io::Result<()> {
                     )
                     .service(
                         web::scope("/sim")
-                            .wrap(AuthMiddleware::new())  // Note the () here
+                            .wrap(AuthMiddleware::new())
                             .app_data(web::Data::new(sim_service.clone()))
                             .configure(sim::configure)
                     )
