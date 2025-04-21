@@ -17,15 +17,11 @@ let newStatValue = 50;
 let newStatDecayRate = 1/60; // Default to 1 unit per minute
 let newStatDecaySlider = 50; // Default slider position (mid-range)
 let newStatIsGrowth = false; // Track whether new stat should grow instead of decay
-let newStatTimeToFull = 100; // Time in minutes to fully decay/grow (default: 100 minutes)
-let newStatTimeToFullDisplay = 100; // For binding to slider (handles Infinity)
 let editingStatName = '';
 let editingStatValue = 50;
 let editingStatDecayRate = 1/60; // Default to 1 unit per minute
 let editingStatDecaySlider = 50; // Default slider position (mid-range)
 let editingStatIsGrowth = false; // Track whether the stat should grow instead of decay
-let editingStatTimeToFull = 100; // Time in minutes to fully decay/grow (default: 100 minutes)
-let editingStatTimeToFullDisplay = 100; // For binding to slider (handles Infinity)
 let statToDelete = '';
 let errorMessage = '';
 let successMessage = '';
@@ -326,7 +322,7 @@ function getTimeDescription(minutes) {
     return "Less than a minute";
   } else if (minutes < 60) {
     return `${minutes} minute${minutes !== 1 ? 's' : ''}`;
-  } else {
+  } else if (minutes < 1440) { // Less than 1 day (24 hours)
     const hours = Math.floor(minutes / 60);
     const remainingMinutes = minutes % 60;
     
@@ -335,6 +331,22 @@ function getTimeDescription(minutes) {
     } else {
       return `${hours} hour${hours !== 1 ? 's' : ''} and ${remainingMinutes} minute${remainingMinutes !== 1 ? 's' : ''}`;
     }
+  } else { // 1 day or more
+    const days = Math.floor(minutes / 1440);
+    const remainingHours = Math.floor((minutes % 1440) / 60);
+    const remainingMinutes = minutes % 60;
+    
+    let result = `${days} day${days !== 1 ? 's' : ''}`;
+    
+    if (remainingHours > 0) {
+      result += ` ${remainingHours} hour${remainingHours !== 1 ? 's' : ''}`;
+    }
+    
+    if (remainingMinutes > 0) {
+      result += ` ${remainingMinutes} minute${remainingMinutes !== 1 ? 's' : ''}`;
+    }
+    
+    return result;
   }
 }
 
@@ -354,8 +366,6 @@ function openCreateStatModal() {
   newStatDecayRate = 1/60; // Reset to default (1 per minute)
   newStatDecaySlider = 50; // Reset to default (mid-range)
   newStatIsGrowth = false; // Reset growth mode to false
-  newStatTimeToFull = getTimeToFullFromRate(1/60); // Calculate default time to full
-  newStatTimeToFullDisplay = newStatTimeToFull; // Initialize display value
   showCreateStatModal = true;
 }
 
@@ -370,26 +380,6 @@ function handleCreateDecaySliderChange(event) {
   const sliderValue = parseFloat(event.target.value);
   newStatDecaySlider = sliderValue;
   newStatDecayRate = getDecayRateFromSlider(sliderValue);
-  
-  // Also update the time to fully decay/grow
-  newStatTimeToFull = getTimeToFullFromRate(newStatDecayRate);
-}
-
-// Function to handle time-to-full slider change in create modal
-function handleCreateTimeSliderChange(event) {
-  const minutes = parseFloat(event.target.value);
-  newStatTimeToFull = minutes;
-  
-  // Update the decay rate based on the time to full
-  if (minutes === 0) {
-    // Infinite (never decays)
-    newStatDecayRate = 0;
-    newStatDecaySlider = 0;
-  } else {
-    // Calculate the decay rate from time to full
-    newStatDecayRate = getRateFromTimeToFull(minutes);
-    newStatDecaySlider = getSliderFromDecayRate(newStatDecayRate);
-  }
 }
 
 // Function to handle decay slider change in edit modal
@@ -397,26 +387,6 @@ function handleEditDecaySliderChange(event) {
   const sliderValue = parseFloat(event.target.value);
   editingStatDecaySlider = sliderValue;
   editingStatDecayRate = getDecayRateFromSlider(sliderValue);
-  
-  // Also update the time to fully decay/grow
-  editingStatTimeToFull = getTimeToFullFromRate(editingStatDecayRate);
-}
-
-// Function to handle time-to-full slider change in edit modal
-function handleEditTimeSliderChange(event) {
-  const minutes = parseFloat(event.target.value);
-  editingStatTimeToFull = minutes;
-  
-  // Update the decay rate based on the time to full
-  if (minutes === 0) {
-    // Infinite (never decays)
-    editingStatDecayRate = 0;
-    editingStatDecaySlider = 0;
-  } else {
-    // Calculate the decay rate from time to full
-    editingStatDecayRate = getRateFromTimeToFull(minutes);
-    editingStatDecaySlider = getSliderFromDecayRate(editingStatDecayRate);
-  }
 }
 
 // Function to handle creating a new stat
@@ -491,10 +461,6 @@ function openEditStatModal(statName) {
     editingStatIsGrowth = stat.decay_rate < 0;
     editingStatDecayRate = absDecayRate;
     editingStatDecaySlider = getSliderFromDecayRate(absDecayRate);
-    
-    // Calculate the time to fully decay/grow
-    editingStatTimeToFull = getTimeToFullFromRate(absDecayRate);
-    editingStatTimeToFullDisplay = editingStatTimeToFull === Infinity ? 1440 : editingStatTimeToFull;
     
     showEditStatModal = true;
   }
@@ -794,91 +760,164 @@ function selectSuggestion(suggestion) {
         </div>
 
         <div>
-          <label for="createDecaySlider" class="block text-sm font-medium mb-1">
-            {newStatIsGrowth ? 'Growth Rate' : 'Decay Rate'}
-          </label>
-          <input 
-            type="range" 
-            id="createDecaySlider" 
-            min="0" 
-            max="300" 
-            step="1" 
-            bind:value={newStatDecaySlider} 
-            on:input={handleCreateDecaySliderChange}
-            class="range range-primary"
-          />
-          <div class="flex justify-between text-xs text-base-content opacity-70 px-1 mt-1">
-            <span>Infinite</span>
-            <span>Slow</span>
-            <span>Medium</span>
-            <span>Fast</span>
-            <span>Very Fast</span>
-          </div>
-          
-          <!-- Add time-to-full slider -->
-          <div class="mt-4">
-            <label for="createTimeSlider" class="block text-sm font-medium mb-1">
-              Time to {newStatIsGrowth ? 'Fully Grow' : 'Fully Decay'}
-            </label>
-            <input 
-              type="range" 
-              id="createTimeSlider" 
-              min="1" 
-              max="1440" 
-              step="5" 
-              bind:value={newStatTimeToFullDisplay} 
-              on:input={(e) => {
-                newStatTimeToFullDisplay = parseFloat(e.target.value);
-                handleCreateTimeSliderChange(e);
-              }}
-              class="range range-secondary"
-              disabled={newStatDecayRate === 0}
-            />
-            <div class="flex justify-between text-xs text-base-content opacity-70 px-1 mt-1">
-              <span>1 minute</span>
-              <span>1 hour</span>
-              <span>6 hours</span>
-              <span>12 hours</span>
-              <span>24 hours</span>
-            </div>
-            <div class="bg-base-300 rounded-md p-2 mt-2 text-sm">
-              {#if newStatDecayRate === 0}
-                <span class="font-semibold">Never</span> - This stat will not change over time.
-              {:else}
-                This stat will {newStatIsGrowth ? 'grow' : 'decay'} completely in <span class="font-semibold">{getTimeDescription(newStatTimeToFull)}</span>.
-              {/if}
-            </div>
-          </div>
-          
-          <!-- Add toggle for growth/decay mode -->
-          <div class="form-control mt-3">
+          <!-- Growth/Decay Mode Toggle at the top -->
+          <div class="form-control mb-4 bg-base-200 p-3 rounded-md">
             <label class="cursor-pointer label justify-start gap-4">
               <input 
                 type="checkbox" 
                 class="toggle toggle-success" 
                 bind:checked={newStatIsGrowth}
+                disabled={newStatDecayRate === 0}
               />
-              <span class="label-text">
-                {newStatIsGrowth ? 'Growth Mode (stat will increase over time)' : 'Decay Mode (stat will decrease over time)'}
-              </span>
+              <div>
+                <span class="label-text font-medium text-base">
+                  {newStatIsGrowth ? 'Growth Mode' : 'Decay Mode'}
+                </span>
+                <p class="text-xs opacity-70 mt-1">
+                  This stat will {newStatIsGrowth ? 'increase' : 'decrease'} over time
+                </p>
+              </div>
             </label>
           </div>
           
-          <div class="bg-base-200 rounded-md p-3 mt-2">
-            <p class="text-sm font-medium text-base-content">
-              Current setting: <span class="font-bold">{getDecayRateDescription(newStatDecayRate)}</span>
-            </p>
-            <p class="text-xs text-base-content opacity-70 mt-1">
-              {#if newStatDecayRate === 0}
-                This stat will <span class="font-semibold">never change</span> and will maintain its value indefinitely.
-              {:else if newStatIsGrowth}
-                This stat will <span class="font-semibold text-success">increase</span> by 1 point {getDecayRateDescription(newStatDecayRate)}.
-                The higher the growth rate, the faster this stat will grow.
-              {:else}
-                This stat will <span class="font-semibold text-error">decrease</span> by 1 point {getDecayRateDescription(newStatDecayRate)}.
-                The higher the decay rate, the more frequently you'll need to maintain this stat.
-              {/if}
-            </p>
+          <!-- Rate Slider with visual indicators and manual input -->
+          <div class="mb-5">
+            <div class="flex justify-between items-center mb-1">
+              <label for="createDecaySlider" class="block text-sm font-medium">
+                {newStatIsGrowth ? 'Growth Rate' : 'Decay Rate'}
+              </label>
+              <div class="dropdown dropdown-end">
+                <label tabindex="0" class="cursor-pointer badge {newStatDecayRate === 0 ? 'badge-neutral' : newStatIsGrowth ? 'badge-success' : 'badge-error'}">
+                  {newStatDecayRate === 0 ? 'Infinite' : getDecayRateDescription(newStatDecayRate)}
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </label>
+                <div tabindex="0" class="dropdown-content z-[1] p-3 shadow-lg bg-base-200 rounded-box w-72">
+                  <div class="form-control w-full">
+                    <label class="label">
+                      <span class="label-text">Enter exact rate</span>
+                    </label>
+                    <div class="flex gap-2">
+                      <input 
+                        type="number" 
+                        min="0.001" 
+                        step="0.01" 
+                        placeholder="Rate" 
+                        class="input input-bordered w-full" 
+                        on:change={(e) => {
+                          const value = parseFloat(e.target.value);
+                          const unit = document.getElementById('rateUnitCreate').value;
+                          let ratePerSecond;
+                          
+                          if (unit === 'second') {
+                            ratePerSecond = value;
+                          } else if (unit === 'minute') {
+                            ratePerSecond = value / 60;
+                          } else if (unit === 'hour') {
+                            ratePerSecond = value / 3600;
+                          } else if (unit === 'day') {
+                            ratePerSecond = value / 86400;
+                          }
+                          
+                          if (ratePerSecond) {
+                            newStatDecayRate = ratePerSecond;
+                            newStatDecaySlider = getSliderFromDecayRate(ratePerSecond);
+                          }
+                        }}
+                      />
+                      <select 
+                        id="rateUnitCreate" 
+                        class="select select-bordered" 
+                        defaultValue="minute"
+                      >
+                        <option value="second">Per second</option>
+                        <option value="minute">Per minute</option>
+                        <option value="hour">Per hour</option>
+                        <option value="day">Per day</option>
+                      </select>
+                    </div>
+                  </div>
+                  
+                  <div class="form-control w-full mt-3">
+                    <label class="label">
+                      <span class="label-text">Time to fully {newStatIsGrowth ? 'grow' : 'decay'}</span>
+                    </label>
+                    <div class="flex gap-2">
+                      <input 
+                        type="number" 
+                        min="1" 
+                        step="1" 
+                        placeholder="Time" 
+                        class="input input-bordered w-full" 
+                        on:change={(e) => {
+                          const value = parseFloat(e.target.value);
+                          const unit = document.getElementById('timeUnitCreate').value;
+                          let minutes;
+                          
+                          if (unit === 'minute') {
+                            minutes = value;
+                          } else if (unit === 'hour') {
+                            minutes = value * 60;
+                          } else if (unit === 'day') {
+                            minutes = value * 1440;
+                          }
+                          
+                          if (minutes) {
+                            const newRate = getRateFromTimeToFull(minutes);
+                            newStatDecayRate = newRate;
+                            newStatDecaySlider = getSliderFromDecayRate(newRate);
+                          }
+                        }}
+                      />
+                      <select 
+                        id="timeUnitCreate" 
+                        class="select select-bordered" 
+                        defaultValue="minute"
+                      >
+                        <option value="minute">Minutes</option>
+                        <option value="hour">Hours</option>
+                        <option value="day">Days</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <input 
+              type="range" 
+              id="createDecaySlider" 
+              min="0" 
+              max="300" 
+              step="1" 
+              bind:value={newStatDecaySlider} 
+              on:input={handleCreateDecaySliderChange}
+              class="range {newStatIsGrowth ? 'range-success' : 'range-error'}"
+            />
+            <div class="flex justify-between text-xs text-base-content opacity-70 px-1 mt-1">
+              <span>Infinite</span>
+              <span>Slow</span>
+              <span>Medium</span>
+              <span>Fast</span>
+              <span>Very Fast</span>
+            </div>
+          </div>
+          
+          <!-- Combined information box -->
+          <div class="bg-base-300 rounded-md p-4 mb-2">
+            {#if newStatDecayRate === 0}
+              <div class="flex items-center gap-3">
+                <div class="badge badge-lg badge-neutral">Infinite</div>
+                <p class="text-sm">This stat will not change over time</p>
+              </div>
+            {:else}
+              <div class="flex items-center gap-3">
+                <p class="text-sm">
+                  <span class="font-semibold">{getTimeDescription(getTimeToFullFromRate(newStatDecayRate))}</span> to 
+                  {newStatIsGrowth ? 'fully grow' : 'fully decay'}
+                </p>
+              </div>
+            {/if}
           </div>
         </div>
         
@@ -934,64 +973,8 @@ function selectSuggestion(suggestion) {
       
       <form on:submit={handleEditStat} class="flex flex-col gap-4">
         <div>
-          <label for="editDecaySlider" class="block text-sm font-medium mb-1">
-            {editingStatIsGrowth ? 'Growth Rate' : 'Decay Rate'}
-          </label>
-          <input 
-            type="range" 
-            id="editDecaySlider" 
-            min="0" 
-            max="300" 
-            step="1" 
-            bind:value={editingStatDecaySlider} 
-            on:input={handleEditDecaySliderChange}
-            class="range range-primary"
-          />
-          <div class="flex justify-between text-xs text-base-content opacity-70 px-1 mt-1">
-            <span>Infinite</span>
-            <span>Slow</span>
-            <span>Medium</span>
-            <span>Fast</span>
-            <span>Very Fast</span>
-          </div>
-          
-          <!-- Add time-to-full slider -->
-          <div class="mt-4">
-            <label for="editTimeSlider" class="block text-sm font-medium mb-1">
-              Time to {editingStatIsGrowth ? 'Fully Grow' : 'Fully Decay'}
-            </label>
-            <input 
-              type="range" 
-              id="editTimeSlider" 
-              min="1" 
-              max="1440" 
-              step="5" 
-              bind:value={editingStatTimeToFullDisplay} 
-              on:input={(e) => {
-                editingStatTimeToFullDisplay = parseFloat(e.target.value);
-                handleEditTimeSliderChange(e);
-              }}
-              class="range range-secondary"
-              disabled={editingStatDecayRate === 0}
-            />
-            <div class="flex justify-between text-xs text-base-content opacity-70 px-1 mt-1">
-              <span>1 minute</span>
-              <span>1 hour</span>
-              <span>6 hours</span>
-              <span>12 hours</span>
-              <span>24 hours</span>
-            </div>
-            <div class="bg-base-300 rounded-md p-2 mt-2 text-sm">
-              {#if editingStatDecayRate === 0}
-                <span class="font-semibold">Never</span> - This stat will not change over time.
-              {:else}
-                This stat will {editingStatIsGrowth ? 'grow' : 'decay'} completely in <span class="font-semibold">{getTimeDescription(editingStatTimeToFull)}</span>.
-              {/if}
-            </div>
-          </div>
-          
-          <!-- Add toggle for growth/decay mode -->
-          <div class="form-control mt-3">
+          <!-- Growth/Decay Mode Toggle at the top -->
+          <div class="form-control mb-4 bg-base-200 p-3 rounded-md">
             <label class="cursor-pointer label justify-start gap-4">
               <input 
                 type="checkbox" 
@@ -999,27 +982,155 @@ function selectSuggestion(suggestion) {
                 bind:checked={editingStatIsGrowth}
                 disabled={editingStatDecayRate === 0}
               />
-              <span class="label-text">
-                {editingStatIsGrowth ? 'Growth Mode (stat will increase over time)' : 'Decay Mode (stat will decrease over time)'}
-              </span>
+              <div>
+                <span class="label-text font-medium text-base">
+                  {editingStatIsGrowth ? 'Growth Mode' : 'Decay Mode'}
+                </span>
+                <p class="text-xs opacity-70 mt-1">
+                  This stat will {editingStatIsGrowth ? 'increase' : 'decrease'} over time
+                </p>
+              </div>
             </label>
           </div>
           
-          <div class="bg-base-200 rounded-md p-3 mt-2">
-            <p class="text-sm font-medium text-base-content">
-              Current setting: <span class="font-bold">{getDecayRateDescription(editingStatDecayRate)}</span>
-            </p>
-            <p class="text-xs text-base-content opacity-70 mt-1">
-              {#if editingStatDecayRate === 0}
-                This stat will <span class="font-semibold">never change</span> and will maintain its value indefinitely.
-              {:else if editingStatIsGrowth}
-                This stat will <span class="font-semibold text-success">increase</span> by 1 point {getDecayRateDescription(editingStatDecayRate)}.
-                The higher the growth rate, the faster this stat will grow.
-              {:else}
-                This stat will <span class="font-semibold text-error">decrease</span> by 1 point {getDecayRateDescription(editingStatDecayRate)}.
-                The higher the decay rate, the more frequently you'll need to maintain this stat.
-              {/if}
-            </p>
+          <!-- Rate Slider with visual indicators and manual input -->
+          <div class="mb-5">
+            <div class="flex justify-between items-center mb-1">
+              <label for="editDecaySlider" class="block text-sm font-medium">
+                {editingStatIsGrowth ? 'Growth Rate' : 'Decay Rate'}
+              </label>
+              <div class="dropdown dropdown-end">
+                <label tabindex="0" class="cursor-pointer badge {editingStatDecayRate === 0 ? 'badge-neutral' : editingStatIsGrowth ? 'badge-success' : 'badge-error'}">
+                  {editingStatDecayRate === 0 ? 'Infinite' : getDecayRateDescription(editingStatDecayRate)}
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </label>
+                <div tabindex="0" class="dropdown-content z-[1] p-3 shadow-lg bg-base-200 rounded-box w-72">
+                  <div class="form-control w-full">
+                    <label class="label">
+                      <span class="label-text">Enter exact rate</span>
+                    </label>
+                    <div class="flex gap-2">
+                      <input 
+                        type="number" 
+                        min="0.001" 
+                        step="0.01" 
+                        placeholder="Rate" 
+                        class="input input-bordered w-full" 
+                        on:change={(e) => {
+                          const value = parseFloat(e.target.value);
+                          const unit = document.getElementById('rateUnitEdit').value;
+                          let ratePerSecond;
+                          
+                          if (unit === 'second') {
+                            ratePerSecond = value;
+                          } else if (unit === 'minute') {
+                            ratePerSecond = value / 60;
+                          } else if (unit === 'hour') {
+                            ratePerSecond = value / 3600;
+                          } else if (unit === 'day') {
+                            ratePerSecond = value / 86400;
+                          }
+                          
+                          if (ratePerSecond) {
+                            editingStatDecayRate = ratePerSecond;
+                            editingStatDecaySlider = getSliderFromDecayRate(ratePerSecond);
+                          }
+                        }}
+                      />
+                      <select 
+                        id="rateUnitEdit" 
+                        class="select select-bordered" 
+                        defaultValue="minute"
+                      >
+                        <option value="second">Per second</option>
+                        <option value="minute">Per minute</option>
+                        <option value="hour">Per hour</option>
+                        <option value="day">Per day</option>
+                      </select>
+                    </div>
+                  </div>
+                  
+                  <div class="form-control w-full mt-3">
+                    <label class="label">
+                      <span class="label-text">Time to fully {editingStatIsGrowth ? 'grow' : 'decay'}</span>
+                    </label>
+                    <div class="flex gap-2">
+                      <input 
+                        type="number" 
+                        min="1" 
+                        step="1" 
+                        placeholder="Time" 
+                        class="input input-bordered w-full" 
+                        on:change={(e) => {
+                          const value = parseFloat(e.target.value);
+                          const unit = document.getElementById('timeUnitEdit').value;
+                          let minutes;
+                          
+                          if (unit === 'minute') {
+                            minutes = value;
+                          } else if (unit === 'hour') {
+                            minutes = value * 60;
+                          } else if (unit === 'day') {
+                            minutes = value * 1440;
+                          }
+                          
+                          if (minutes) {
+                            const newRate = getRateFromTimeToFull(minutes);
+                            editingStatDecayRate = newRate;
+                            editingStatDecaySlider = getSliderFromDecayRate(newRate);
+                          }
+                        }}
+                      />
+                      <select 
+                        id="timeUnitEdit" 
+                        class="select select-bordered" 
+                        defaultValue="minute"
+                      >
+                        <option value="minute">Minutes</option>
+                        <option value="hour">Hours</option>
+                        <option value="day">Days</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <input 
+              type="range" 
+              id="editDecaySlider" 
+              min="0" 
+              max="300" 
+              step="1" 
+              bind:value={editingStatDecaySlider} 
+              on:input={handleEditDecaySliderChange}
+              class="range {editingStatIsGrowth ? 'range-success' : 'range-error'}"
+            />
+            <div class="flex justify-between text-xs text-base-content opacity-70 px-1 mt-1">
+              <span>Infinite</span>
+              <span>Slow</span>
+              <span>Medium</span>
+              <span>Fast</span>
+              <span>Very Fast</span>
+            </div>
+          </div>
+          
+          <!-- Combined information box -->
+          <div class="bg-base-300 rounded-md p-4 mb-2">
+            {#if editingStatDecayRate === 0}
+              <div class="flex items-center gap-3">
+                <div class="badge badge-lg badge-neutral">Infinite</div>
+                <p class="text-sm">This stat will not change over time</p>
+              </div>
+            {:else}
+              <div class="flex items-center gap-3">
+                <p class="text-sm">
+                  <span class="font-semibold">{getTimeDescription(getTimeToFullFromRate(editingStatDecayRate))}</span> to 
+                  {editingStatIsGrowth ? 'fully grow' : 'fully decay'}
+                </p>
+              </div>
+            {/if}
           </div>
         </div>
         
