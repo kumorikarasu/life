@@ -3,9 +3,13 @@ ifneq (,$(wildcard ./.env))
     export
 endif
 
+deploy-api: build-api helm-deploy-api
+
 build:
 	docker build --target prod -t registry.home.ryougi.ca/simbru-pwa front
 	docker push registry.home.ryougi.ca/simbru-pwa
+
+build-api:
 	docker build --target prod -t registry.home.ryougi.ca/simbru-api back/api
 	docker push registry.home.ryougi.ca/simbru-api
 
@@ -18,7 +22,8 @@ helm-deploy:
 		--set ingress.hosts[0].host=simbru.home.ryougi.ca \
 		--set ingress.hosts[0].paths[0].path=/ \
 		--set ingress.hosts[0].paths[0].pathType=ImplementationSpecific \
-
+	
+helm-deploy-api:
 	helm upgrade --install simbru-api helm --namespace simbru-pwa --create-namespace \
 		--set image.repository=registry.home.ryougi.ca/simbru-api \
 		--set image.tag=latest \
@@ -28,6 +33,9 @@ helm-deploy:
 		--set ingress.hosts[0].paths[0].path=/ \
 		--set ingress.hosts[0].paths[0].pathType=ImplementationSpecific \
 		--set env.POSTGRES_CONNECTION_STRING=${DATABASE_URL} \
+		--set env.OAUTH_CLIENT_ID=${OAUTH_CLIENT_ID} \
+		--set env.OAUTH_CLIENT_SECRET=${OAUTH_CLIENT_SECRET} \
+		--set env.OAUTH_REDIRECT_URI=${OAUTH_REDIRECT_URI} \
 		--set service.port=8000
 
 build-no-cache:

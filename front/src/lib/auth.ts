@@ -7,6 +7,7 @@ interface AuthState {
     user: {
         name: string;
         email?: string;
+        picture?: string;
     } | null;
 }
 
@@ -71,7 +72,7 @@ const createAuthStore = () => {
 
     return {
         subscribe,
-        login: (token: string, userData?: { name: string; email?: string }) => {
+        login: (token: string, userData?: { name: string; email?: string; picture?: string }) => {
             const newState = { isAuthenticated: true, token, user: userData || null };
             set(newState);
             saveAuthStateToCookies(newState);
@@ -87,7 +88,7 @@ const createAuthStore = () => {
 export const auth = createAuthStore();
 
 export const login = async () => {
-  window.location.href = `http://${import.meta.env.VITE_API_ENDPOINT}/api/v1/auth/login`;
+  window.location.href = `${import.meta.env.VITE_API_ENDPOINT}/api/v1/auth/login`;
 };
 
 export const handleCallback = async (code: string, state: string) => {
@@ -97,7 +98,7 @@ export const handleCallback = async (code: string, state: string) => {
   console.log(import.meta.env.VITE_API_ENDPOINT);
 
   const response = await fetch(
-      `http://${endpoint}/api/v1/auth/callback`,
+      `${endpoint}/api/v1/auth/callback`,
       {
           method: 'POST',
           headers: {
@@ -112,7 +113,8 @@ export const handleCallback = async (code: string, state: string) => {
       const token = data.token || data;
       const userData = data.user ? {
         name: data.user.name || 'User',
-        email: data.user.email
+        email: data.user.email,
+        picture: data.user.picture
       } : null;
       
       auth.login(token, userData);

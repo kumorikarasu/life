@@ -19,6 +19,14 @@
   let decayInterval: number | null = null
   let timeSinceLastDecay = 0
   let lastUpdateTime = Date.now()
+  let lastSyncTime = Date.now()
+  let valueHasChanged = false
+  
+  // Track whether the slider is currently being interacted with
+  let isSliderActive = false
+
+  // How often to sync visual value with parent component (ms)
+  const SYNC_INTERVAL = 2000 // 2 seconds
   
   // Drag and drop state
   let isDragging = false
@@ -33,8 +41,8 @@
   let containerHeight = 0
   let dragTargetIndex = null
   
-  // Update the background color based on visualValue
-  $: bg = "hsl(" + (Math.round(visualValue / 30) * 30) + ", 90%, 50%)"
+  // Update the background color based on visualValue and growth/decay status
+  $: bg = "hsl(" + (Math.round(visualValue / 30) * 30) + ", " + (decay_rate < 0 ? "90%, 70%" : "90%, 50%)")
   
   // Keep currentValue and visualValue in sync with external value changes
   $: if (value !== undefined && value !== null) {
@@ -67,6 +75,9 @@
   }
   
   function handleInput(event) {
+    // Mark slider as active when user interacts with it
+    isSliderActive = true;
+    
     // Update local value for visual feedback without sending to parent
     currentValue = Number(event.target.value);
     
@@ -79,9 +90,29 @@
   }
   
   function handleChange() {
+    // Mark slider as inactive when user releases it
+    isSliderActive = false;
+    
     // Only send to parent when slider is released
     if (currentValue !== value) {
       onValueChange(name, currentValue);
+    }
+  }
+  
+  // Add mousedown/touchstart handlers to track interaction start
+  function handleSliderMouseDown() {
+    isSliderActive = true;
+  }
+  
+  // Mouse events for when user releases slider outside the component
+  function handleGlobalMouseUp() {
+    if (isSliderActive) {
+      isSliderActive = false;
+      
+      // Sync value with parent when releasing the slider
+      if (currentValue !== value) {
+        onValueChange(name, currentValue);
+      }
     }
   }
   
@@ -197,6 +228,7 @@
   
   onMount(() => {
     startDecayVisualization();
+    window.addEventListener('mouseup', handleGlobalMouseUp);
   });
   
   onDestroy(() => {
@@ -205,6 +237,7 @@
     // Clean up event listeners if component is destroyed while dragging
     window.removeEventListener('mousemove', handleDragMove);
     window.removeEventListener('mouseup', handleDragEnd);
+    window.removeEventListener('mouseup', handleGlobalMouseUp);
   });
   
   function startDecayVisualization() {
@@ -212,6 +245,11 @@
     
     // Update every 100ms for smooth visual decay
     decayInterval = window.setInterval(() => {
+      // Skip decay if slider is currently being interacted with
+      if (isSliderActive) {
+        return;
+      }
+      
       const now = Date.now();
       const deltaTime = (now - lastUpdateTime) / 1000; // Convert to seconds
       lastUpdateTime = now;
@@ -224,12 +262,37 @@
         return;
       }
       
-      // Calculate how much to decay based on decay_rate and elapsed time
-      const decayAmount = decay_rate * deltaTime;
+      // Calculate how much to change based on decay_rate and elapsed time
+      const decayAmount = Math.abs(decay_rate) * deltaTime;
       
       // Only update if there's a noticeable change (>= 0.01)
       if (decayAmount >= 0.01) {
-        visualValue = Math.max(0, visualValue - decayAmount);
+        const oldValue = visualValue;
+        
+        // If decay_rate is negative, the stat should grow instead of decay
+        if (decay_rate < 0) {
+          // For growth, increase the value up to 100
+          visualValue = Math.min(100, visualValue + decayAmount);
+        } else {
+          // For decay, decrease the value down to 0
+          visualValue = Math.max(0, visualValue - decayAmount);
+        }
+        
+        // Check if the value has changed by at least 1 whole number
+        if (Math.floor(oldValue) !== Math.floor(visualValue)) {
+          valueHasChanged = true;
+        }
+        
+        // If it's time to sync and the value has changed meaningfully
+        if (valueHasChanged && (now - lastSyncTime > SYNC_INTERVAL)) {
+          // Only update the actual value for auto-sort purposes
+          if (Math.round(visualValue) !== Math.round(value)) {
+            // Update the parent component with the new value
+            onValueChange(name, Math.round(visualValue));
+            lastSyncTime = now;
+            valueHasChanged = false;
+          }
+        }
       }
     }, 100);
   }
@@ -254,11 +317,13 @@
   class:draggable={draggable} 
   class:is-dragging={isDragging}
   class:drag-target={isDragging && dragTargetIndex !== null}
+  class:growth-mode={decay_rate < 0}
   style={isDragging ? `transform: translate(${translateX}px, ${translateY}px);` : ''}
 >
   <div class="flex justify-between items-center">
     <p 
-      class="text-base-content cursor-grab font-bold" 
+      class="text-base-content font-bold" 
+      class:cursor-grab={draggable}
       class:cursor-grabbing={isDragging}
       on:mousedown={handleDragStart}
     >
@@ -270,8 +335,34 @@
         </span>
       {/if}
       {name} <span class="text-sm font-normal opacity-80 ml-4">{Math.round(visualValue)}</span>
+      
+      {#if decay_rate < 0}
+        <span class="badge badge-sm badge-success ml-2 text-xs">Growth</span>
+      {/if}
     </p>
     <div class="flex space-x-2">
+      {#if draggable && index > 0}
+        <button 
+          class="btn btn-sm btn-ghost" 
+          title="Move up"
+          on:click={() => onReorder(name, 'up')}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+          </svg>
+        </button>
+      {/if}
+      {#if draggable && index < totalStats - 1}
+        <button 
+          class="btn btn-sm btn-ghost" 
+          title="Move down"
+          on:click={() => onReorder(name, 'down')}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+      {/if}
       <button 
         class="btn btn-sm btn-ghost" 
         title="Edit stat"
@@ -301,6 +392,8 @@
     class="range" 
     on:input={handleInput}
     on:change={handleChange}
+    on:mousedown={handleSliderMouseDown}
+    on:touchstart={handleSliderMouseDown}
   />
   <div class="flex justify-between text-xs text-base-content opacity-70 px-1 mt-1">
     <span>0</span>

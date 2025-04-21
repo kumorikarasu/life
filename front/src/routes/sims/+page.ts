@@ -1,4 +1,3 @@
-export const prerender = false;
 export const ssr = false;
 
 import { auth } from '$lib/auth';
@@ -39,7 +38,7 @@ export async function load({ fetch }): Promise<{
   let sims: Sim[] = [];
   if (authState.isAuthenticated) {
     try {
-      const response = await fetchWithAuth(`http://${import.meta.env.VITE_API_ENDPOINT}/api/v1/sim/active_user`);
+      const response = await fetchWithAuth(`${import.meta.env.VITE_API_ENDPOINT}/api/v1/sim/active_user`);
       if (response.ok) {
         sims = await response.json();
       } else {
@@ -65,7 +64,7 @@ export async function load({ fetch }): Promise<{
       console.log('Creating sim with data:', simData);
       console.log('Auth token present:', !!authState.token);
       
-      const response = await fetchWithAuth(`http://${import.meta.env.VITE_API_ENDPOINT}/api/v1/sim`, {
+      const response = await fetchWithAuth(`${import.meta.env.VITE_API_ENDPOINT}/api/v1/sim`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -92,7 +91,7 @@ export async function load({ fetch }): Promise<{
     if (!authState.isAuthenticated) return false;
     
     try {
-      const response = await fetchWithAuth(`http://${import.meta.env.VITE_API_ENDPOINT}/api/v1/sim/${id}`, {
+      const response = await fetchWithAuth(`${import.meta.env.VITE_API_ENDPOINT}/api/v1/sim/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${authState.token}`

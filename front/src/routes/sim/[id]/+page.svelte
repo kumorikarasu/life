@@ -3,6 +3,8 @@ import '../../../assets/app.css'
 import Range from '$lib/Range.svelte'
 import Navbar from '$lib/Navbar.svelte'
 import { auth, login } from "$lib/auth";
+import { browser } from '$app/environment';
+import { onMount } from 'svelte';
 
 export let data;
 
@@ -14,67 +16,203 @@ let newStatName = '';
 let newStatValue = 50;
 let newStatDecayRate = 1/60; // Default to 1 unit per minute
 let newStatDecaySlider = 50; // Default slider position (mid-range)
+let newStatIsGrowth = false; // Track whether new stat should grow instead of decay
+let newStatTimeToFull = 100; // Time in minutes to fully decay/grow (default: 100 minutes)
+let newStatTimeToFullDisplay = 100; // For binding to slider (handles Infinity)
 let editingStatName = '';
 let editingStatValue = 50;
 let editingStatDecayRate = 1/60; // Default to 1 unit per minute
 let editingStatDecaySlider = 50; // Default slider position (mid-range)
+let editingStatIsGrowth = false; // Track whether the stat should grow instead of decay
+let editingStatTimeToFull = 100; // Time in minutes to fully decay/grow (default: 100 minutes)
+let editingStatTimeToFullDisplay = 100; // For binding to slider (handles Infinity)
 let statToDelete = '';
 let errorMessage = '';
 let successMessage = '';
 let loading = false;
 // Store stat order in this array
 let statOrder = [];
+// Keep track of the manual order (when auto-sort is off)
+let manualStatOrder = [];
+// Use a reactive variable to track auto-sort state
+let autoSortEnabled = false;
+// Track sort direction (true = descending/highest first, false = ascending/lowest first)
+let sortDescending = true;
+// Track whether sliders are currently being dragged
+let isCreateSliderDragging = false;
+let isEditSliderDragging = false;
 
-// Update statOrder when data.sim.stats changes
-$: if (data?.sim?.stats && (!statOrder.length || statOrder.length !== data.sim.stats.length)) {
-  // Sort stats by order_index if available, otherwise use the order received from the backend
+// Local storage keys
+const AUTO_SORT_STORAGE_KEY = 'simBru_autoSortEnabled';
+const SORT_DIRECTION_STORAGE_KEY = 'simBru_sortDescending';
+
+// For tracking when stat values change (to trigger auto-sort)
+let statsSignal = 0;
+
+// Set up a reactive statement to update autoSortEnabled when localStorage changes
+function checkAutoSortSetting() {
+  if (browser) {
+    const savedPreference = localStorage.getItem(AUTO_SORT_STORAGE_KEY);
+    return savedPreference === 'true';
+  }
+  return false;
+}
+
+// Check sort direction from localStorage
+function checkSortDirectionSetting() {
+  if (browser) {
+    const savedDirection = localStorage.getItem(SORT_DIRECTION_STORAGE_KEY);
+    return savedDirection !== 'false'; // Default to true (descending) if not set
+  }
+  return true;
+}
+
+// Check for localStorage changes using addEventListener
+onMount(() => {
+  if (browser) {
+    // Initialize on mount
+    autoSortEnabled = checkAutoSortSetting();
+    sortDescending = checkSortDirectionSetting();
+    
+    // Listen for storage events (when changed from another tab/window)
+    window.addEventListener('storage', (event) => {
+      if (event.key === AUTO_SORT_STORAGE_KEY) {
+        autoSortEnabled = event.newValue === 'true';
+      } else if (event.key === SORT_DIRECTION_STORAGE_KEY) {
+        sortDescending = event.newValue !== 'false';
+      }
+    });
+  }
+});
+
+// Create a custom event handler to detect changes from the navbar
+function handleStorageChange() {
+  if (browser) {
+    autoSortEnabled = checkAutoSortSetting();
+  }
+}
+
+// Set an interval to periodically check localStorage
+let checkInterval;
+onMount(() => {
+  checkInterval = setInterval(handleStorageChange, 300); // Check every 300ms
+  return () => clearInterval(checkInterval); // Clean up on component destroy
+});
+
+// Set up a scheduled update to sync backend values with visual decay
+let syncInterval;
+
+// Schedule periodic updates to sync actual values with database
+onMount(() => {
+  // Check for auto-sort setting
+  autoSortEnabled = checkAutoSortSetting();
+  sortDescending = checkSortDirectionSetting();
+  
+  // Listen for storage events (when changed from another tab/window)
+  if (browser) {
+    window.addEventListener('storage', (event) => {
+      if (event.key === AUTO_SORT_STORAGE_KEY) {
+        autoSortEnabled = event.newValue === 'true';
+      } else if (event.key === SORT_DIRECTION_STORAGE_KEY) {
+        sortDescending = event.newValue !== 'false';
+      }
+    });
+  }
+  
+  // Set up interval to periodically check localStorage and handle storage change
+  checkInterval = setInterval(handleStorageChange, 300);
+  
+  return () => {
+    clearInterval(checkInterval);
+  };
+});
+
+// Initialize manual order from database order when data first loads
+$: if (data?.sim?.stats && manualStatOrder.length === 0) {
+  // Initial load from database
   const sortedStats = [...data.sim.stats].sort((a, b) => {
-    // If both stats have order_index, sort by that
-    if (a.order_index !== undefined && b.order_index !== undefined) {
-      return a.order_index - b.order_index;
-    }
-    // Fall back to the order received from the backend
-    return 0;
+    const aIndex = typeof a.order_index === 'number' ? a.order_index : 0;
+    const bIndex = typeof b.order_index === 'number' ? b.order_index : 0;
+    return aIndex - bIndex;
   });
   
-  // Extract just the names for our statOrder array
-  statOrder = sortedStats.map(stat => stat.name);
+  // Set both statOrder and manualStatOrder
+  manualStatOrder = sortedStats.map(stat => stat.name);
+  statOrder = [...manualStatOrder];
+}
+
+// Update statOrder when data.sim.stats changes or when autoSortEnabled changes
+// or when statsSignal changes (indicating values have been modified)
+$: if (data?.sim?.stats && manualStatOrder.length > 0) {
+  if (autoSortEnabled) {
+    // Including statsSignal in the dependency array to trigger re-sort when values change
+    const triggerReactivity = statsSignal; // This does nothing but forces reactivity
+    
+    // Sort stats by value, respecting the sort direction
+    const sortedStats = [...data.sim.stats].sort((a, b) => {
+      return sortDescending ? b.value - a.value : a.value - b.value;
+    });
+    statOrder = sortedStats.map(stat => stat.name);
+  } else {
+    // When auto-sort is disabled, use our manually maintained order
+    // which preserves any reordering the user has done
+    statOrder = [...manualStatOrder];
+  }
+}
+
+// Toggle auto-sort function and save to local storage
+function toggleAutoSort() {
+  autoSortEnabled = !autoSortEnabled;
+  
+  // Save preference to local storage
+  if (browser) {
+    localStorage.setItem(AUTO_SORT_STORAGE_KEY, autoSortEnabled.toString());
+  }
+}
+
+// Toggle sort direction and save to local storage
+function toggleSortDirection() {
+  sortDescending = !sortDescending;
+  
+  // Save preference to local storage
+  if (browser) {
+    localStorage.setItem(SORT_DIRECTION_STORAGE_KEY, sortDescending.toString());
+  }
 }
 
 // Function to reorder stats
 async function handleReorderStat(statName, direction, positions = 1) {
+  // Don't allow manual reordering when auto-sort is enabled
+  if (autoSortEnabled) return;
+  
   const currentIndex = statOrder.indexOf(statName);
   if (currentIndex < 0) return;
   
   // Calculate the target index based on direction and positions to move
   let newIndex;
   if (direction === 'up') {
-    // Move up by the specified number of positions
     newIndex = Math.max(0, currentIndex - positions);
-  } else if (direction === 'down') {
-    // Move down by the specified number of positions
-    newIndex = Math.min(statOrder.length - 1, currentIndex + positions);
   } else {
-    // Invalid direction
-    return;
+    newIndex = Math.min(statOrder.length - 1, currentIndex + positions);
   }
   
-  // No need to reorder if the index hasn't changed
+  // Don't do anything if the index wouldn't change
   if (newIndex === currentIndex) return;
   
-  // Create a new array for the updated order
+  // Create a copy of the array
   const newOrder = [...statOrder];
   
-  // Remove the stat from its current position
+  // Remove the item from its current position
   newOrder.splice(currentIndex, 1);
   
   // Insert it at the new position
   newOrder.splice(newIndex, 0, statName);
   
-  // Update the state
+  // Update the statOrder array
   statOrder = newOrder;
+  manualStatOrder = [...newOrder]; // Update manual order as well
   
-  // Save the new order to the backend
+  // Save the new order
   saveStatOrder();
 }
 
@@ -157,6 +295,49 @@ function getDecayRateDescription(decayRate) {
   }
 }
 
+// Function to calculate time to fully decay/grow based on decay rate
+function getTimeToFullFromRate(decayRate) {
+  // For infinite (rate of 0), return Infinity
+  if (decayRate === 0) return Infinity;
+  
+  // Time to decay/grow fully = 100 / rate per second
+  // Using absolute value to handle both growth and decay
+  const absRate = Math.abs(decayRate);
+  const seconds = 100 / absRate;
+  
+  // Convert to minutes and round to nearest integer
+  return Math.round(seconds / 60);
+}
+
+// Function to calculate decay rate from time to fully decay/grow
+function getRateFromTimeToFull(minutes) {
+  // For infinite (0 minutes), return 0 rate
+  if (minutes === 0) return 0;
+  
+  // Rate per second = 100 / (minutes * 60)
+  return 100 / (minutes * 60);
+}
+
+// Function to get human-readable time description
+function getTimeDescription(minutes) {
+  if (!isFinite(minutes)) {
+    return "Never";
+  } else if (minutes < 1) {
+    return "Less than a minute";
+  } else if (minutes < 60) {
+    return `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+  } else {
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    
+    if (remainingMinutes === 0) {
+      return `${hours} hour${hours !== 1 ? 's' : ''}`;
+    } else {
+      return `${hours} hour${hours !== 1 ? 's' : ''} and ${remainingMinutes} minute${remainingMinutes !== 1 ? 's' : ''}`;
+    }
+  }
+}
+
 // Suggested stat types that would make sense for a life simulation
 const suggestedStats = [
   'Energy', 'Hunger', 'Thirst', 'Sleep', 'Hygiene', 
@@ -172,6 +353,9 @@ function openCreateStatModal() {
   newStatValue = 50; // Reset to default
   newStatDecayRate = 1/60; // Reset to default (1 per minute)
   newStatDecaySlider = 50; // Reset to default (mid-range)
+  newStatIsGrowth = false; // Reset growth mode to false
+  newStatTimeToFull = getTimeToFullFromRate(1/60); // Calculate default time to full
+  newStatTimeToFullDisplay = newStatTimeToFull; // Initialize display value
   showCreateStatModal = true;
 }
 
@@ -186,6 +370,26 @@ function handleCreateDecaySliderChange(event) {
   const sliderValue = parseFloat(event.target.value);
   newStatDecaySlider = sliderValue;
   newStatDecayRate = getDecayRateFromSlider(sliderValue);
+  
+  // Also update the time to fully decay/grow
+  newStatTimeToFull = getTimeToFullFromRate(newStatDecayRate);
+}
+
+// Function to handle time-to-full slider change in create modal
+function handleCreateTimeSliderChange(event) {
+  const minutes = parseFloat(event.target.value);
+  newStatTimeToFull = minutes;
+  
+  // Update the decay rate based on the time to full
+  if (minutes === 0) {
+    // Infinite (never decays)
+    newStatDecayRate = 0;
+    newStatDecaySlider = 0;
+  } else {
+    // Calculate the decay rate from time to full
+    newStatDecayRate = getRateFromTimeToFull(minutes);
+    newStatDecaySlider = getSliderFromDecayRate(newStatDecayRate);
+  }
 }
 
 // Function to handle decay slider change in edit modal
@@ -193,9 +397,29 @@ function handleEditDecaySliderChange(event) {
   const sliderValue = parseFloat(event.target.value);
   editingStatDecaySlider = sliderValue;
   editingStatDecayRate = getDecayRateFromSlider(sliderValue);
+  
+  // Also update the time to fully decay/grow
+  editingStatTimeToFull = getTimeToFullFromRate(editingStatDecayRate);
 }
 
-// Function to create a new stat
+// Function to handle time-to-full slider change in edit modal
+function handleEditTimeSliderChange(event) {
+  const minutes = parseFloat(event.target.value);
+  editingStatTimeToFull = minutes;
+  
+  // Update the decay rate based on the time to full
+  if (minutes === 0) {
+    // Infinite (never decays)
+    editingStatDecayRate = 0;
+    editingStatDecaySlider = 0;
+  } else {
+    // Calculate the decay rate from time to full
+    editingStatDecayRate = getRateFromTimeToFull(minutes);
+    editingStatDecaySlider = getSliderFromDecayRate(editingStatDecayRate);
+  }
+}
+
+// Function to handle creating a new stat
 async function handleCreateStat(event) {
   event.preventDefault();
   
@@ -216,9 +440,9 @@ async function handleCreateStat(event) {
     return;
   }
 
-  // Validate decay rate is non-negative
+  // Validate decay rate is non-negative before applying direction
   if (newStatDecayRate < 0) {
-    errorMessage = 'Decay rate cannot be negative';
+    errorMessage = 'Rate value cannot be negative';
     return;
   }
   
@@ -226,13 +450,17 @@ async function handleCreateStat(event) {
   loading = true;
   
   try {
-    const newStat = await data.createStat(data.sim.id, newStatName.trim(), newStatValue, newStatDecayRate);
+    // Apply growth mode by making decay rate negative if needed
+    const finalDecayRate = newStatIsGrowth ? -newStatDecayRate : newStatDecayRate;
+    
+    const newStat = await data.createStat(data.sim.id, newStatName.trim(), newStatValue, finalDecayRate);
     if (newStat) {
       // Add the new stat to the sim object
       data.sim.stats = [...data.sim.stats, newStat];
       
       // Show success message and close modal
-      successMessage = `Stat "${newStat.name}" created successfully!`;
+      const modeText = newStatIsGrowth ? 'Growth' : 'Decay';
+      successMessage = `Stat "${newStat.name}" with ${modeText} mode created successfully!`;
       showCreateStatModal = false;
       
       // Clear success message after 3 seconds
@@ -257,8 +485,17 @@ function openEditStatModal(statName) {
   if (stat) {
     editingStatName = stat.name;
     editingStatValue = stat.value;
-    editingStatDecayRate = stat.decay_rate || 1/60;
-    editingStatDecaySlider = getSliderFromDecayRate(editingStatDecayRate);
+    
+    // Check if the decay rate is negative, which indicates growth mode
+    const absDecayRate = Math.abs(stat.decay_rate || 1/60);
+    editingStatIsGrowth = stat.decay_rate < 0;
+    editingStatDecayRate = absDecayRate;
+    editingStatDecaySlider = getSliderFromDecayRate(absDecayRate);
+    
+    // Calculate the time to fully decay/grow
+    editingStatTimeToFull = getTimeToFullFromRate(absDecayRate);
+    editingStatTimeToFullDisplay = editingStatTimeToFull === Infinity ? 1440 : editingStatTimeToFull;
+    
     showEditStatModal = true;
   }
 }
@@ -273,9 +510,9 @@ function closeEditStatModal() {
 async function handleEditStat(event) {
   event.preventDefault();
   
-  // Validate decay rate is non-negative
+  // Validate decay rate is non-negative before applying any direction
   if (editingStatDecayRate < 0) {
-    errorMessage = 'Decay rate cannot be negative';
+    errorMessage = 'Rate value cannot be negative';
     return;
   }
   
@@ -291,21 +528,25 @@ async function handleEditStat(event) {
       return;
     }
     
-    const success = await data.updateStat(data.sim.id, editingStatName, stat.value, editingStatDecayRate);
+    // Apply the growth mode by making the decay rate negative if needed
+    const finalDecayRate = editingStatIsGrowth ? -editingStatDecayRate : editingStatDecayRate;
+    
+    const success = await data.updateStat(data.sim.id, editingStatName, stat.value, finalDecayRate);
     if (success) {
       // Update only the decay_rate in the sim object, leave value unchanged
       data.sim.stats = data.sim.stats.map(s => {
         if (s.name === editingStatName) {
           return {
             ...s,
-            decay_rate: editingStatDecayRate
+            decay_rate: finalDecayRate
           };
         }
         return s;
       });
       
       // Show success message and close modal
-      successMessage = `Decay rate for "${editingStatName}" updated successfully!`;
+      const modeText = editingStatIsGrowth ? 'Growth' : 'Decay';
+      successMessage = `${modeText} rate for "${editingStatName}" updated successfully!`;
       showEditStatModal = false;
       
       // Clear success message after 3 seconds
@@ -313,11 +554,11 @@ async function handleEditStat(event) {
         successMessage = '';
       }, 3000);
     } else {
-      errorMessage = 'Failed to update decay rate. Please try again.';
+      errorMessage = `Failed to update ${editingStatIsGrowth ? 'growth' : 'decay'} rate. Please try again.`;
     }
   } catch (error) {
-    console.error('Error updating decay rate:', error);
-    errorMessage = 'An error occurred while updating the decay rate.';
+    console.error('Error updating rate:', error);
+    errorMessage = `An error occurred while updating the ${editingStatIsGrowth ? 'growth' : 'decay'} rate.`;
   } finally {
     loading = false;
   }
@@ -372,19 +613,37 @@ async function handleDeleteStat() {
 async function handleStatValueChange(statName, newValue) {
   const stat = data.sim.stats.find(s => s.name === statName);
   if (stat) {
-    // Only update if the value has actually changed
-    if (stat.value !== newValue) {
-      const success = await data.updateStat(data.sim.id, statName, newValue, stat.decay_rate || 1/60);
-      if (!success) {
-        // If update fails, revert to previous value
-        data.sim.stats = data.sim.stats.map(s => {
-          if (s.name === statName) {
-            return { ...s, value: stat.value };
-          }
-          return s;
-        });
-        console.error('Failed to update stat value');
+    // Only update if the value has actually changed significantly (at least 1 point)
+    if (Math.abs(stat.value - newValue) >= 1) {
+      // Determine if this is an automatic update (decay or growth) or a manual change
+      // For decay: value decreases by small amount
+      // For growth: value increases by small amount
+      const isAutomaticUpdate = 
+        (Math.abs(stat.value - newValue) < 5) && 
+        ((stat.decay_rate > 0 && newValue < stat.value) || // Decay mode decreasing
+         (stat.decay_rate < 0 && newValue > stat.value));  // Growth mode increasing
+      
+      // For automatic updates, we only want to update the local state without database write
+      // For manual changes, we also update the database
+      if (!isAutomaticUpdate) {
+        // This is likely a manual change, so update the database
+        const success = await data.updateStat(data.sim.id, statName, newValue, stat.decay_rate || 1/60);
+        if (!success) {
+          console.error('Failed to update stat value in database');
+          return; // Don't update local state if database update failed
+        }
       }
+      
+      // Update the local state regardless (for both automatic updates and manual changes)
+      data.sim.stats = data.sim.stats.map(s => {
+        if (s.name === statName) {
+          return { ...s, value: newValue };
+        }
+        return s;
+      });
+      
+      // Update the statsSignal to trigger auto-sort
+      statsSignal += 1;
     }
   }
 }
@@ -416,12 +675,32 @@ function selectSuggestion(suggestion) {
           <div class="flex justify-between items-center mb-6">
             <div class="flex items-center gap-4">
               <h1 class="text-2xl font-bold">{data.sim.name}</h1>
-              <p class="text-sm text-base-content opacity-80 italic flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                </svg>
-                Drag stats to reorder them
-              </p>
+              {#if !autoSortEnabled}
+                <p class="text-sm text-base-content opacity-80 italic flex items-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                  </svg>
+                  Drag stats to reorder them
+                </p>
+              {:else}
+                <button 
+                  class="text-sm btn btn-sm btn-ghost flex items-center gap-1 opacity-80"
+                  on:click={toggleSortDirection}
+                  title={sortDescending ? "Currently: Highest to lowest" : "Currently: Lowest to highest"}
+                >
+                  {#if sortDescending}
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+                    </svg>
+                    <span>Highest to lowest</span>
+                  {:else}
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h9m5-4v12m0 0l-4-4m4 4l4-4" />
+                    </svg>
+                    <span>Lowest to highest</span>
+                  {/if}
+                </button>
+              {/if}
             </div>
             <div class="flex gap-2">
               <button class="btn btn-primary btn-sm" on:click={openCreateStatModal}>
@@ -433,6 +712,8 @@ function selectSuggestion(suggestion) {
               <a href="/sims" class="btn btn-sm btn-outline">Back to All Sims</a>
             </div>
           </div>
+          
+          <!-- Auto-sort toggle moved to navbar dropdown -->
           
           {#if data.sim.stats && data.sim.stats.length > 0}
             <div class="grid grid-cols-1 gap-3 px-4">
@@ -447,7 +728,7 @@ function selectSuggestion(suggestion) {
                       onDelete={confirmDeleteStat}
                       onValueChange={handleStatValueChange}
                       onReorder={handleReorderStat}
-                      draggable={true}
+                      draggable={!autoSortEnabled}
                       index={index}
                       totalStats={statOrder.length}
                     />
@@ -513,7 +794,9 @@ function selectSuggestion(suggestion) {
         </div>
 
         <div>
-          <label for="createDecaySlider" class="block text-sm font-medium mb-1">Decay Rate</label>
+          <label for="createDecaySlider" class="block text-sm font-medium mb-1">
+            {newStatIsGrowth ? 'Growth Rate' : 'Decay Rate'}
+          </label>
           <input 
             type="range" 
             id="createDecaySlider" 
@@ -531,15 +814,68 @@ function selectSuggestion(suggestion) {
             <span>Fast</span>
             <span>Very Fast</span>
           </div>
+          
+          <!-- Add time-to-full slider -->
+          <div class="mt-4">
+            <label for="createTimeSlider" class="block text-sm font-medium mb-1">
+              Time to {newStatIsGrowth ? 'Fully Grow' : 'Fully Decay'}
+            </label>
+            <input 
+              type="range" 
+              id="createTimeSlider" 
+              min="1" 
+              max="1440" 
+              step="5" 
+              bind:value={newStatTimeToFullDisplay} 
+              on:input={(e) => {
+                newStatTimeToFullDisplay = parseFloat(e.target.value);
+                handleCreateTimeSliderChange(e);
+              }}
+              class="range range-secondary"
+              disabled={newStatDecayRate === 0}
+            />
+            <div class="flex justify-between text-xs text-base-content opacity-70 px-1 mt-1">
+              <span>1 minute</span>
+              <span>1 hour</span>
+              <span>6 hours</span>
+              <span>12 hours</span>
+              <span>24 hours</span>
+            </div>
+            <div class="bg-base-300 rounded-md p-2 mt-2 text-sm">
+              {#if newStatDecayRate === 0}
+                <span class="font-semibold">Never</span> - This stat will not change over time.
+              {:else}
+                This stat will {newStatIsGrowth ? 'grow' : 'decay'} completely in <span class="font-semibold">{getTimeDescription(newStatTimeToFull)}</span>.
+              {/if}
+            </div>
+          </div>
+          
+          <!-- Add toggle for growth/decay mode -->
+          <div class="form-control mt-3">
+            <label class="cursor-pointer label justify-start gap-4">
+              <input 
+                type="checkbox" 
+                class="toggle toggle-success" 
+                bind:checked={newStatIsGrowth}
+              />
+              <span class="label-text">
+                {newStatIsGrowth ? 'Growth Mode (stat will increase over time)' : 'Decay Mode (stat will decrease over time)'}
+              </span>
+            </label>
+          </div>
+          
           <div class="bg-base-200 rounded-md p-3 mt-2">
             <p class="text-sm font-medium text-base-content">
               Current setting: <span class="font-bold">{getDecayRateDescription(newStatDecayRate)}</span>
             </p>
             <p class="text-xs text-base-content opacity-70 mt-1">
               {#if newStatDecayRate === 0}
-                This stat will <span class="font-semibold">never decay</span> and will maintain its value indefinitely.
+                This stat will <span class="font-semibold">never change</span> and will maintain its value indefinitely.
+              {:else if newStatIsGrowth}
+                This stat will <span class="font-semibold text-success">increase</span> by 1 point {getDecayRateDescription(newStatDecayRate)}.
+                The higher the growth rate, the faster this stat will grow.
               {:else}
-                This stat will decrease by 1 point {getDecayRateDescription(newStatDecayRate)}.
+                This stat will <span class="font-semibold text-error">decrease</span> by 1 point {getDecayRateDescription(newStatDecayRate)}.
                 The higher the decay rate, the more frequently you'll need to maintain this stat.
               {/if}
             </p>
@@ -598,7 +934,9 @@ function selectSuggestion(suggestion) {
       
       <form on:submit={handleEditStat} class="flex flex-col gap-4">
         <div>
-          <label for="editDecaySlider" class="block text-sm font-medium mb-1">Decay Rate</label>
+          <label for="editDecaySlider" class="block text-sm font-medium mb-1">
+            {editingStatIsGrowth ? 'Growth Rate' : 'Decay Rate'}
+          </label>
           <input 
             type="range" 
             id="editDecaySlider" 
@@ -616,15 +954,69 @@ function selectSuggestion(suggestion) {
             <span>Fast</span>
             <span>Very Fast</span>
           </div>
+          
+          <!-- Add time-to-full slider -->
+          <div class="mt-4">
+            <label for="editTimeSlider" class="block text-sm font-medium mb-1">
+              Time to {editingStatIsGrowth ? 'Fully Grow' : 'Fully Decay'}
+            </label>
+            <input 
+              type="range" 
+              id="editTimeSlider" 
+              min="1" 
+              max="1440" 
+              step="5" 
+              bind:value={editingStatTimeToFullDisplay} 
+              on:input={(e) => {
+                editingStatTimeToFullDisplay = parseFloat(e.target.value);
+                handleEditTimeSliderChange(e);
+              }}
+              class="range range-secondary"
+              disabled={editingStatDecayRate === 0}
+            />
+            <div class="flex justify-between text-xs text-base-content opacity-70 px-1 mt-1">
+              <span>1 minute</span>
+              <span>1 hour</span>
+              <span>6 hours</span>
+              <span>12 hours</span>
+              <span>24 hours</span>
+            </div>
+            <div class="bg-base-300 rounded-md p-2 mt-2 text-sm">
+              {#if editingStatDecayRate === 0}
+                <span class="font-semibold">Never</span> - This stat will not change over time.
+              {:else}
+                This stat will {editingStatIsGrowth ? 'grow' : 'decay'} completely in <span class="font-semibold">{getTimeDescription(editingStatTimeToFull)}</span>.
+              {/if}
+            </div>
+          </div>
+          
+          <!-- Add toggle for growth/decay mode -->
+          <div class="form-control mt-3">
+            <label class="cursor-pointer label justify-start gap-4">
+              <input 
+                type="checkbox" 
+                class="toggle toggle-success" 
+                bind:checked={editingStatIsGrowth}
+                disabled={editingStatDecayRate === 0}
+              />
+              <span class="label-text">
+                {editingStatIsGrowth ? 'Growth Mode (stat will increase over time)' : 'Decay Mode (stat will decrease over time)'}
+              </span>
+            </label>
+          </div>
+          
           <div class="bg-base-200 rounded-md p-3 mt-2">
             <p class="text-sm font-medium text-base-content">
               Current setting: <span class="font-bold">{getDecayRateDescription(editingStatDecayRate)}</span>
             </p>
             <p class="text-xs text-base-content opacity-70 mt-1">
               {#if editingStatDecayRate === 0}
-                This stat will <span class="font-semibold">never decay</span> and will maintain its value indefinitely.
+                This stat will <span class="font-semibold">never change</span> and will maintain its value indefinitely.
+              {:else if editingStatIsGrowth}
+                This stat will <span class="font-semibold text-success">increase</span> by 1 point {getDecayRateDescription(editingStatDecayRate)}.
+                The higher the growth rate, the faster this stat will grow.
               {:else}
-                This stat will decrease by 1 point {getDecayRateDescription(editingStatDecayRate)}.
+                This stat will <span class="font-semibold text-error">decrease</span> by 1 point {getDecayRateDescription(editingStatDecayRate)}.
                 The higher the decay rate, the more frequently you'll need to maintain this stat.
               {/if}
             </p>

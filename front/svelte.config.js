@@ -9,7 +9,7 @@ export default {
 		adapter: adapter({
       pages: 'build',
       assets: 'build',
-      fallback: null,
+      fallback: 'index.html',  // Changed from null to 'index.html' for SPA mode
       precompress: false,
       strict: true
     }),

@@ -21,7 +21,7 @@ RUN cargo build --release
 
 
 # Final Stage
-FROM debian:slim-bullseye as prod
+FROM debian:bullseye-slim as prod
 
 RUN apt-get update && apt-get install -y libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
 

@@ -1,4 +1,3 @@
-export const prerender = false;
 export const ssr = false;
 
 import { auth } from '$lib/auth';
@@ -39,7 +38,7 @@ export async function load({ fetch, params }) {
   let sim = null;
   if (authState.isAuthenticated) {
     console.log('Authenticated, loading sim:', simId);
-    const req = await fetchWithAuth(`http://${import.meta.env.VITE_API_ENDPOINT}/api/v1/sim/${simId}`);
+    const req = await fetchWithAuth(`${import.meta.env.VITE_API_ENDPOINT}/api/v1/sim/${simId}`);
     if (req.ok) {
       sim = await req.json();
     }
@@ -59,7 +58,7 @@ export async function load({ fetch, params }) {
       await new Promise(resolve => setTimeout(resolve, 1000))
         .then(async () => {
           // Use PUT for updating existing sims
-          await fetchWithAuth(`http://${import.meta.env.VITE_API_ENDPOINT}/api/v1/sim/${data.id}`, {
+          await fetchWithAuth(`${import.meta.env.VITE_API_ENDPOINT}/api/v1/sim/${data.id}`, {
             method: 'PUT',
             headers: {
               'Content-Type': 'application/json'
@@ -87,7 +86,7 @@ export async function load({ fetch, params }) {
           order_index: orderIndex // Add it at the end of the list
         };
         
-        const response = await fetchWithAuth(`http://${import.meta.env.VITE_API_ENDPOINT}/api/v1/sim/${simId}/stat`, {
+        const response = await fetchWithAuth(`${import.meta.env.VITE_API_ENDPOINT}/api/v1/sim/${simId}/stat`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -119,7 +118,7 @@ export async function load({ fetch, params }) {
           decay_rate: decayRate
         };
         
-        const response = await fetchWithAuth(`http://${import.meta.env.VITE_API_ENDPOINT}/api/v1/sim/${simId}/stat/${statName}`, {
+        const response = await fetchWithAuth(`${import.meta.env.VITE_API_ENDPOINT}/api/v1/sim/${simId}/stat/${statName}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -138,7 +137,7 @@ export async function load({ fetch, params }) {
       if (!authState.isAuthenticated) return false;
       
       try {
-        const response = await fetchWithAuth(`http://${import.meta.env.VITE_API_ENDPOINT}/api/v1/sim/${simId}/stat/${statName}`, {
+        const response = await fetchWithAuth(`${import.meta.env.VITE_API_ENDPOINT}/api/v1/sim/${simId}/stat/${statName}`, {
           method: 'DELETE',
           headers: {
             'Authorization': `Bearer ${authState.token}`
@@ -155,7 +154,7 @@ export async function load({ fetch, params }) {
       if (!authState.isAuthenticated) return false;
       
       try {
-        const response = await fetchWithAuth(`http://${import.meta.env.VITE_API_ENDPOINT}/api/v1/sim/${simId}/stats/order`, {
+        const response = await fetchWithAuth(`${import.meta.env.VITE_API_ENDPOINT}/api/v1/sim/${simId}/stats/order`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',

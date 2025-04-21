@@ -32,10 +32,19 @@ impl SimService {
         
         // Apply decay if decay_rate is set and elapsed time is positive
         if let Some(decay_rate) = stat.decay_rate {
-            if decay_rate > 0.0 && elapsed_seconds > 0 {
-                let decay_amount = decay_rate * elapsed_seconds as f32;
-                // Ensure value doesn't go below 0
-                value = (value - decay_amount).max(0.0);
+            if elapsed_seconds > 0 {
+                if decay_rate > 0.0 {
+                    // Regular decay - value decreases over time
+                    let decay_amount = decay_rate * elapsed_seconds as f32;
+                    // Ensure value doesn't go below 0
+                    value = (value - decay_amount).max(0.0);
+                } else if decay_rate < 0.0 {
+                    // Growth mode - value increases over time (negative decay rate)
+                    let growth_amount = decay_rate.abs() * elapsed_seconds as f32;
+                    // Ensure value doesn't exceed 100
+                    value = (value + growth_amount).min(100.0);
+                }
+                // If decay_rate is exactly 0, no change to value
             }
         }
         
