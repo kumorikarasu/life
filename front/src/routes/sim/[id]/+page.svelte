@@ -9,19 +9,19 @@ import { onMount } from 'svelte';
 export let data;
 
 // State variables for stat creation and editing
-let showCreateStatModal = false;
-let showEditStatModal = false;
-let showDeleteStatConfirm = false;
-let newStatName = '';
-let newStatValue = 50;
-let newStatDecayRate = 1/60; // Default to 1 unit per minute
-let newStatDecaySlider = 50; // Default slider position (mid-range)
-let newStatIsGrowth = false; // Track whether new stat should grow instead of decay
-let editingStatName = '';
-let editingStatValue = 50;
-let editingStatDecayRate = 1/60; // Default to 1 unit per minute
-let editingStatDecaySlider = 50; // Default slider position (mid-range)
-let editingStatIsGrowth = false; // Track whether the stat should grow instead of decay
+let showStatModal = false; // Single modal for both create and edit
+let showDeleteStatConfirm = false; // Modal for confirming stat deletion
+let isEditMode = false; // Flag to determine if we're editing or creating
+let statName = '';
+let statValue = 50;
+let statDecayRate = 1/60; // Default to 1 unit per minute
+let statDecaySlider = 50; // Default slider position (mid-range)
+let statIsGrowth = false; // Track whether stat should grow instead of decay
+// For displaying formatted values in modal
+let rateDisplayValue = 0; // For the displayed rate in the selected unit
+let rateUnit = "minute"; // Default unit for rate
+let timeDisplayValue = 0; // For the displayed time in the selected unit
+let timeUnit = "minute"; // Default unit for time
 let statToDelete = '';
 let errorMessage = '';
 let successMessage = '';
@@ -362,85 +362,112 @@ const suggestedStats = [
   'Mood', 'Intelligence', 'Creativity', 'Money', 'Career'
 ];
 
-// Function to open the create stat modal
-function openCreateStatModal() {
+// Function to open the unified stat modal (for both create and edit)
+function openStatModal(existingStatName = null) {
   errorMessage = '';
-  successMessage = '';
-  newStatName = '';
-  newStatValue = 50; // Reset to default
-  newStatDecayRate = 1/60; // Reset to default (1 per minute)
-  newStatDecaySlider = 50; // Reset to default (mid-range)
-  newStatIsGrowth = false; // Reset growth mode to false
-  showCreateStatModal = true;
+  isEditMode = existingStatName !== null;
+  
+  // Reset form fields
+  if (isEditMode) {
+    // Edit mode - load existing stat data
+    const stat = data.sim.stats.find(s => s.name === existingStatName);
+    if (stat) {
+      statName = stat.name;
+      statValue = stat.value;
+      
+      // Check if the decay rate is negative, which indicates growth mode
+      const absDecayRate = Math.abs(stat.decay_rate || 1/60);
+      statIsGrowth = stat.decay_rate < 0;
+      statDecayRate = absDecayRate;
+      statDecaySlider = getSliderFromDecayRate(absDecayRate);
+      
+      // Set default unit to minute and calculate initial display values
+      rateUnit = "minute";
+      rateDisplayValue = Math.round(absDecayRate * 60); // Default to per minute
+      
+      // Initialize time values as well
+      timeUnit = "minute";
+      timeDisplayValue = Math.round(getTimeToFullFromRate(absDecayRate));
+    }
+  } else {
+    // Create mode - use defaults
+    statName = '';
+    statValue = 0; // Default to 0 instead of 50
+    statDecayRate = 1/60; // Reset to default (1 per minute)
+    statDecaySlider = 150; // Reset to default (mid-range)
+    statIsGrowth = false; // Reset growth mode to false
+    
+    // Initialize display values
+    rateUnit = "minute";
+    rateDisplayValue = 1; // 1 per minute
+    timeUnit = "minute";
+    timeDisplayValue = 100; // 100 minutes to fully decay
+  }
+  
+  showStatModal = true;
 }
 
-// Function to close the create stat modal
-function closeCreateStatModal() {
-  showCreateStatModal = false;
+// Function to close the unified stat modal
+function closeStatModal() {
+  showStatModal = false;
   errorMessage = '';
 }
 
-// Function to handle decay slider change in create modal
-function handleCreateDecaySliderChange(event) {
+// Function to handle the decay slider changes in unified modal
+function handleDecaySliderChange(event) {
   const sliderValue = parseFloat(event.target.value);
-  newStatDecaySlider = sliderValue;
-  newStatDecayRate = getDecayRateFromSlider(sliderValue);
-}
-
-// Function to handle decay slider change in edit modal
-function handleEditDecaySliderChange(event) {
-  const sliderValue = parseFloat(event.target.value);
-  editingStatDecaySlider = sliderValue;
-  editingStatDecayRate = getDecayRateFromSlider(sliderValue);
+  statDecaySlider = sliderValue;
+  statDecayRate = getDecayRateFromSlider(sliderValue);
   
   // Update the displayed rate value based on selected unit
-  if (editingRateUnit === 'second') {
-    editingRateDisplayValue = Math.round(editingStatDecayRate);
-  } else if (editingRateUnit === 'minute') {
-    editingRateDisplayValue = Math.round(editingStatDecayRate * 60);
-  } else if (editingRateUnit === 'hour') {
-    editingRateDisplayValue = Math.round(editingStatDecayRate * 3600);
-  } else if (editingRateUnit === 'day') {
-    editingRateDisplayValue = Math.round(editingStatDecayRate * 86400);
+  if (rateUnit === 'second') {
+    rateDisplayValue = Math.round(statDecayRate);
+  } else if (rateUnit === 'minute') {
+    rateDisplayValue = Math.round(statDecayRate * 60);
+  } else if (rateUnit === 'hour') {
+    rateDisplayValue = Math.round(statDecayRate * 3600);
+  } else if (rateUnit === 'day') {
+    rateDisplayValue = Math.round(statDecayRate * 86400);
   }
   
   // Update the displayed time value
-  const minutes = getTimeToFullFromRate(editingStatDecayRate);
-  if (editingTimeUnit === 'minute') {
-    editingTimeDisplayValue = Math.round(minutes);
-  } else if (editingTimeUnit === 'hour') {
-    editingTimeDisplayValue = Math.round(minutes / 60);
-  } else if (editingTimeUnit === 'day') {
-    editingTimeDisplayValue = Math.round(minutes / 1440);
+  const minutes = getTimeToFullFromRate(statDecayRate);
+  if (timeUnit === 'minute') {
+    timeDisplayValue = Math.round(minutes);
+  } else if (timeUnit === 'hour') {
+    timeDisplayValue = Math.round(minutes / 60);
+  } else if (timeUnit === 'day') {
+    timeDisplayValue = Math.round(minutes / 1440);
   } else {
-    editingTimeDisplayValue = Math.round(minutes);
+    timeDisplayValue = Math.round(minutes);
   }
 }
 
-// Function to handle creating a new stat
-async function handleCreateStat(event) {
+// Function to handle both creating and editing a stat
+async function handleSaveStat(event) {
   event.preventDefault();
   
-  if (!newStatName.trim()) {
+  // Validate the form
+  if (!statName.trim()) {
     errorMessage = 'Please enter a stat name';
     return;
   }
   
-  // Check if stat already exists
-  if (data.sim.stats.some(stat => stat.name.toLowerCase() === newStatName.trim().toLowerCase())) {
-    errorMessage = 'A stat with this name already exists';
-    return;
-  }
-
   // Validate value is between 0 and 100
-  if (newStatValue < 0 || newStatValue > 100) {
-    errorMessage = 'Initial value must be between 0 and 100';
+  if (statValue < 0 || statValue > 100) {
+    errorMessage = 'Value must be between 0 and 100';
     return;
   }
 
   // Validate decay rate is non-negative before applying direction
-  if (newStatDecayRate < 0) {
+  if (statDecayRate < 0) {
     errorMessage = 'Rate value cannot be negative';
+    return;
+  }
+  
+  // For create mode, check if the stat already exists
+  if (!isEditMode && data.sim.stats.some(stat => stat.name.toLowerCase() === statName.trim().toLowerCase())) {
+    errorMessage = 'A stat with this name already exists';
     return;
   }
   
@@ -449,118 +476,59 @@ async function handleCreateStat(event) {
   
   try {
     // Apply growth mode by making decay rate negative if needed
-    const finalDecayRate = newStatIsGrowth ? -newStatDecayRate : newStatDecayRate;
+    const finalDecayRate = statIsGrowth ? -statDecayRate : statDecayRate;
     
-    const newStat = await data.createStat(data.sim.id, newStatName.trim(), newStatValue, finalDecayRate);
-    if (newStat) {
-      // Add the new stat to the sim object
-      data.sim.stats = [...data.sim.stats, newStat];
-      
-      // Show success message and close modal
-      const modeText = newStatIsGrowth ? 'Growth' : 'Decay';
-      successMessage = `Stat "${newStat.name}" with ${modeText} mode created successfully!`;
-      showCreateStatModal = false;
-      
-      // Clear success message after 3 seconds
-      setTimeout(() => {
-        successMessage = '';
-      }, 3000);
+    if (isEditMode) {
+      // Updating an existing stat
+      const success = await data.updateStat(data.sim.id, statName, statValue, finalDecayRate);
+      if (success) {
+        // Update in the sim object
+        data.sim.stats = data.sim.stats.map(s => {
+          if (s.name === statName) {
+            return {
+              ...s,
+              value: statValue,
+              decay_rate: finalDecayRate
+            };
+          }
+          return s;
+        });
+        
+        // Show success message
+        const modeText = statIsGrowth ? 'Growth' : 'Decay';
+        successMessage = `${modeText} rate for "${statName}" updated successfully!`;
+      } else {
+        errorMessage = `Failed to update ${statIsGrowth ? 'growth' : 'decay'} rate. Please try again.`;
+        loading = false;
+        return;
+      }
     } else {
-      errorMessage = 'Failed to create stat. Please try again.';
+      // Creating a new stat
+      const newStat = await data.createStat(data.sim.id, statName.trim(), statValue, finalDecayRate);
+      if (newStat) {
+        // Add the new stat to the sim object
+        data.sim.stats = [...data.sim.stats, newStat];
+        
+        // Show success message
+        const modeText = statIsGrowth ? 'Growth' : 'Decay';
+        successMessage = `Stat "${newStat.name}" with ${modeText} mode created successfully!`;
+      } else {
+        errorMessage = 'Failed to create stat. Please try again.';
+        loading = false;
+        return;
+      }
     }
+    
+    // Close modal and clean up
+    showStatModal = false;
+    
+    // Clear success message after 3 seconds
+    setTimeout(() => {
+      successMessage = '';
+    }, 3000);
   } catch (error) {
-    console.error('Error creating stat:', error);
-    errorMessage = 'An error occurred while creating the stat.';
-  } finally {
-    loading = false;
-  }
-}
-
-// Function to open the edit stat modal
-function openEditStatModal(statName) {
-  errorMessage = '';
-  const stat = data.sim.stats.find(s => s.name === statName);
-  if (stat) {
-    editingStatName = stat.name;
-    editingStatValue = stat.value;
-    
-    // Check if the decay rate is negative, which indicates growth mode
-    const absDecayRate = Math.abs(stat.decay_rate || 1/60);
-    editingStatIsGrowth = stat.decay_rate < 0;
-    editingStatDecayRate = absDecayRate;
-    editingStatDecaySlider = getSliderFromDecayRate(absDecayRate);
-    
-    // Set default unit to minute and calculate initial display values
-    editingRateUnit = "minute";
-    editingRateDisplayValue = Math.round(absDecayRate * 60); // Default to per minute
-    
-    // Initialize time values as well
-    editingTimeUnit = "minute";
-    editingTimeDisplayValue = Math.round(getTimeToFullFromRate(absDecayRate));
-    
-    showEditStatModal = true;
-  }
-}
-
-// Function to close the edit stat modal
-function closeEditStatModal() {
-  showEditStatModal = false;
-  errorMessage = '';
-}
-
-// Function to handle editing a stat
-async function handleEditStat(event) {
-  event.preventDefault();
-  
-  // Validate decay rate is non-negative before applying any direction
-  if (editingStatDecayRate < 0) {
-    errorMessage = 'Rate value cannot be negative';
-    return;
-  }
-  
-  errorMessage = '';
-  loading = true;
-  
-  try {
-    // Get the current value of the stat to pass it unchanged
-    const stat = data.sim.stats.find(s => s.name === editingStatName);
-    if (!stat) {
-      errorMessage = 'Stat not found';
-      loading = false;
-      return;
-    }
-    
-    // Apply the growth mode by making the decay rate negative if needed
-    const finalDecayRate = editingStatIsGrowth ? -editingStatDecayRate : editingStatDecayRate;
-    
-    const success = await data.updateStat(data.sim.id, editingStatName, stat.value, finalDecayRate);
-    if (success) {
-      // Update only the decay_rate in the sim object, leave value unchanged
-      data.sim.stats = data.sim.stats.map(s => {
-        if (s.name === editingStatName) {
-          return {
-            ...s,
-            decay_rate: finalDecayRate
-          };
-        }
-        return s;
-      });
-      
-      // Show success message and close modal
-      const modeText = editingStatIsGrowth ? 'Growth' : 'Decay';
-      successMessage = `${modeText} rate for "${editingStatName}" updated successfully!`;
-      showEditStatModal = false;
-      
-      // Clear success message after 3 seconds
-      setTimeout(() => {
-        successMessage = '';
-      }, 3000);
-    } else {
-      errorMessage = `Failed to update ${editingStatIsGrowth ? 'growth' : 'decay'} rate. Please try again.`;
-    }
-  } catch (error) {
-    console.error('Error updating rate:', error);
-    errorMessage = `An error occurred while updating the ${editingStatIsGrowth ? 'growth' : 'decay'} rate.`;
+    console.error(`Error ${isEditMode ? 'updating' : 'creating'} stat:`, error);
+    errorMessage = `An error occurred while ${isEditMode ? 'updating' : 'creating'} the stat.`;
   } finally {
     loading = false;
   }
@@ -705,7 +673,7 @@ function selectSuggestion(suggestion) {
               {/if}
             </div>
             <div class="flex gap-2">
-              <button class="btn btn-primary btn-sm" on:click={openCreateStatModal}>
+              <button class="btn btn-primary btn-sm" on:click={() => openStatModal()}>
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                 </svg>
@@ -726,7 +694,7 @@ function selectSuggestion(suggestion) {
                       name={stat.name} 
                       value={stat.value} 
                       decay_rate={stat.decay_rate || 1/60}
-                      onEdit={openEditStatModal}
+                      onEdit={(name) => openStatModal(name)}
                       onDelete={confirmDeleteStat}
                       onValueChange={handleStatValueChange}
                       onReorder={handleReorderStat}
@@ -763,251 +731,31 @@ function selectSuggestion(suggestion) {
   {/if}
 </main>
 
-<!-- Create Stat Modal -->
-{#if showCreateStatModal}
+<!-- Unified Stat Modal (for both Add and Edit) -->
+{#if showStatModal}
   <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
     <div class="bg-base-100 rounded-lg p-6 max-w-md w-full">
-      <h3 class="text-xl font-semibold mb-4">Add New Stat</h3>
+      <h3 class="text-xl font-semibold mb-4">
+        {isEditMode ? `Edit Stat: ${statName}` : 'Add New Stat'}
+      </h3>
       
-      <form on:submit={handleCreateStat} class="flex flex-col gap-4">
-        <div>
-          <label for="statName" class="block text-sm font-medium mb-1">Stat Name</label>
-          <input 
-            type="text" 
-            id="statName" 
-            bind:value={newStatName} 
-            placeholder="Enter stat name" 
-            class="input input-bordered w-full" 
-            autofocus
-          />
-        </div>
-
-        <div>
-          <label for="statValue" class="block text-sm font-medium mb-1">Initial Value (0-100)</label>
-          <input 
-            type="number" 
-            id="statValue" 
-            bind:value={newStatValue} 
-            min="0"
-            max="100"
-            step="1"
-            class="input input-bordered w-full" 
-          />
-        </div>
-
-        <div>
-          <!-- Growth/Decay Mode Toggle at the top -->
-          <div class="form-control mb-4 bg-base-200 p-3 rounded-md">
-            <label class="cursor-pointer label justify-start gap-4">
-              <input 
-                type="checkbox" 
-                class="toggle toggle-success" 
-                bind:checked={newStatIsGrowth}
-                disabled={newStatDecayRate === 0}
-              />
-              <div>
-                <span class="label-text font-medium text-base">
-                  {newStatIsGrowth ? 'Growth Mode' : 'Decay Mode'}
-                </span>
-                <p class="text-xs opacity-70 mt-1">
-                  This stat will {newStatIsGrowth ? 'increase' : 'decrease'} over time
-                </p>
-              </div>
-            </label>
-          </div>
-          
-          <!-- Rate Slider with visual indicators and manual input -->
-          <div class="mb-5">
-            <div class="flex justify-between items-center mb-1">
-              <label for="createDecaySlider" class="block text-sm font-medium">
-                {newStatIsGrowth ? 'Growth Rate' : 'Decay Rate'}
-              </label>
-              <div class="dropdown dropdown-end">
-                <label tabindex="0" class="cursor-pointer badge {newStatDecayRate === 0 ? 'badge-neutral' : newStatIsGrowth ? 'badge-success' : 'badge-error'}">
-                  {newStatDecayRate === 0 ? 'Infinite' : getDecayRateDescription(newStatDecayRate)}
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </label>
-                <div tabindex="0" class="dropdown-content z-[1] p-3 shadow-lg bg-base-200 rounded-box w-72">
-                  <div class="form-control w-full">
-                    <label class="label">
-                      <span class="label-text">Enter exact rate</span>
-                    </label>
-                    <div class="flex gap-2">
-                      <input 
-                        type="number" 
-                        min="0.001" 
-                        step="0.01" 
-                        placeholder="Rate" 
-                        class="input input-bordered w-full max-w-xs flex-1" 
-                        on:change={(e) => {
-                          const value = parseFloat(e.target.value);
-                          const unit = document.getElementById('rateUnitCreate').value;
-                          let ratePerSecond;
-                          
-                          if (unit === 'second') {
-                            ratePerSecond = value;
-                          } else if (unit === 'minute') {
-                            ratePerSecond = value / 60;
-                          } else if (unit === 'hour') {
-                            ratePerSecond = value / 3600;
-                          } else if (unit === 'day') {
-                            ratePerSecond = value / 86400;
-                          }
-                          
-                          if (ratePerSecond) {
-                            newStatDecayRate = ratePerSecond;
-                            newStatDecaySlider = getSliderFromDecayRate(ratePerSecond);
-                          }
-                        }}
-                      />
-                      <select 
-                        id="rateUnitCreate" 
-                        class="select select-bordered w-24" 
-                        defaultValue="minute"
-                      >
-                        <option value="second">Per second</option>
-                        <option value="minute">Per minute</option>
-                        <option value="hour">Per hour</option>
-                        <option value="day">Per day</option>
-                      </select>
-                    </div>
-                  </div>
-                  
-                  <div class="form-control w-full mt-3">
-                    <label class="label">
-                      <span class="label-text">Time to fully {newStatIsGrowth ? 'grow' : 'decay'}</span>
-                    </label>
-                    <div class="flex gap-2">
-                      <input 
-                        type="text" 
-                        pattern="[0-9]*" 
-                        inputmode="numeric"
-                        placeholder="Time" 
-                        class="input input-bordered w-full max-w-xs flex-1" 
-                        on:change={(e) => {
-                          const value = parseInt(e.target.value, 10) || 0;
-                          const unit = document.getElementById('timeUnitCreate').value;
-                          let minutes;
-                          
-                          if (unit === 'minute') {
-                            minutes = value;
-                          } else if (unit === 'hour') {
-                            minutes = value * 60;
-                          } else if (unit === 'day') {
-                            minutes = value * 1440;
-                          }
-                          
-                          if (minutes) {
-                            const newRate = getRateFromTimeToFull(minutes);
-                            newStatDecayRate = newRate;
-                            newStatDecaySlider = getSliderFromDecayRate(newRate);
-                          }
-                        }}
-                      />
-                      <select 
-                        id="timeUnitCreate" 
-                        class="select select-bordered w-24" 
-                        defaultValue="minute"
-                      >
-                        <option value="minute">Minutes</option>
-                        <option value="hour">Hours</option>
-                        <option value="day">Days</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+      <form on:submit={handleSaveStat} class="flex flex-col gap-4">
+        {#if !isEditMode}
+          <div>
+            <label for="statName" class="block text-sm font-medium mb-1">Stat Name</label>
             <input 
-              type="range" 
-              id="createDecaySlider" 
-              min="0" 
-              max="300" 
-              step="1" 
-              bind:value={newStatDecaySlider} 
-              on:input={handleCreateDecaySliderChange}
-              class="range {newStatIsGrowth ? 'range-success' : 'range-error'}"
+              type="text" 
+              id="statName" 
+              bind:value={statName} 
+              placeholder="Enter stat name" 
+              class="input input-bordered w-full" 
+              autofocus
+              disabled={isEditMode}
             />
-            <div class="flex justify-between text-xs text-base-content opacity-70 px-1 mt-1">
-              <span>Infinite</span>
-              <span>Slow</span>
-              <span>Medium</span>
-              <span>Fast</span>
-              <span>Very Fast</span>
-            </div>
           </div>
-          
-          <!-- Combined information box -->
-          <div class="bg-base-300 rounded-md p-4 mb-2">
-            {#if newStatDecayRate === 0}
-              <div class="flex items-center gap-3">
-                <div class="badge badge-lg badge-neutral">Infinite</div>
-                <p class="text-sm">This stat will not change over time</p>
-              </div>
-            {:else}
-              <div class="flex items-center gap-3">
-                <p class="text-sm">
-                  <span class="font-semibold">{getTimeDescription(getTimeToFullFromRate(newStatDecayRate))}</span> to 
-                  {newStatIsGrowth ? 'fully grow' : 'fully decay'}
-                </p>
-              </div>
-            {/if}
-          </div>
-        </div>
-        
-        <div>
-          <p class="text-sm font-medium mb-2">Suggested Stats:</p>
-          <div class="flex flex-wrap gap-2">
-            {#each suggestedStats as suggestion}
-              <button 
-                type="button"
-                class="badge badge-outline hover:bg-primary hover:text-primary-content transition-colors cursor-pointer p-3"
-                on:click={() => selectSuggestion(suggestion)}
-              >
-                {suggestion}
-              </button>
-            {/each}
-          </div>
-        </div>
-        
-        {#if errorMessage}
-          <div class="alert alert-error mt-3 text-sm">
-            <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-            <span>{errorMessage}</span>
-          </div>
+          <!-- Initial value field removed, will default to 0 -->
         {/if}
-        
-        <div class="flex justify-end gap-3 mt-2">
-          <button 
-            type="button" 
-            class="btn btn-ghost" 
-            on:click={closeCreateStatModal}
-            disabled={loading}
-          >
-            Cancel
-          </button>
-          <button 
-            type="submit" 
-            class="btn btn-primary" 
-            disabled={loading || !newStatName.trim()}
-          >
-            {loading ? 'Creating...' : 'Create Stat'}
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-{/if}
 
-<!-- Edit Stat Modal -->
-{#if showEditStatModal}
-  <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-    <div class="bg-base-100 rounded-lg p-6 max-w-md w-full">
-      <h3 class="text-xl font-semibold mb-4">Edit Stat: {editingStatName}</h3>
-      
-      <form on:submit={handleEditStat} class="flex flex-col gap-4">
         <div>
           <!-- Growth/Decay Mode Toggle at the top -->
           <div class="form-control mb-4 bg-base-200 p-3 rounded-md">
@@ -1015,15 +763,15 @@ function selectSuggestion(suggestion) {
               <input 
                 type="checkbox" 
                 class="toggle toggle-success" 
-                bind:checked={editingStatIsGrowth}
-                disabled={editingStatDecayRate === 0}
+                bind:checked={statIsGrowth}
+                disabled={statDecayRate === 0}
               />
               <div>
                 <span class="label-text font-medium text-base">
-                  {editingStatIsGrowth ? 'Growth Mode' : 'Decay Mode'}
+                  {statIsGrowth ? 'Growth Mode' : 'Decay Mode'}
                 </span>
                 <p class="text-xs opacity-70 mt-1">
-                  This stat will {editingStatIsGrowth ? 'increase' : 'decrease'} over time
+                  This stat will {statIsGrowth ? 'increase' : 'decrease'} over time
                 </p>
               </div>
             </label>
@@ -1032,12 +780,12 @@ function selectSuggestion(suggestion) {
           <!-- Rate Slider with visual indicators and manual input -->
           <div class="mb-5">
             <div class="flex justify-between items-center mb-1">
-              <label for="editDecaySlider" class="block text-sm font-medium">
-                {editingStatIsGrowth ? 'Growth Rate' : 'Decay Rate'}
+              <label for="statDecaySlider" class="block text-sm font-medium">
+                {statIsGrowth ? 'Growth Rate' : 'Decay Rate'}
               </label>
               <div class="dropdown dropdown-end">
-                <label tabindex="0" class="cursor-pointer badge {editingStatDecayRate === 0 ? 'badge-neutral' : editingStatIsGrowth ? 'badge-success' : 'badge-error'}">
-                  {editingStatDecayRate === 0 ? 'Infinite' : getDecayRateDescription(editingStatDecayRate)}
+                <label tabindex="0" class="cursor-pointer badge {statDecayRate === 0 ? 'badge-neutral' : statIsGrowth ? 'badge-success' : 'badge-error'}">
+                  {statDecayRate === 0 ? 'Infinite' : getDecayRateDescription(statDecayRate)}
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                   </svg>
@@ -1054,10 +802,10 @@ function selectSuggestion(suggestion) {
                         inputmode="numeric"
                         placeholder="Rate" 
                         class="input input-bordered w-full max-w-xs flex-1"
-                        value={editingRateDisplayValue}
+                        value={rateDisplayValue}
                         on:change={(e) => {
                           const value = parseInt(e.target.value, 10) || 0;
-                          const unit = document.getElementById('rateUnitEdit').value;
+                          const unit = document.getElementById('rateUnit').value;
                           let ratePerSecond;
                           
                           if (unit === 'second') {
@@ -1071,42 +819,42 @@ function selectSuggestion(suggestion) {
                           }
                           
                           if (ratePerSecond) {
-                            editingStatDecayRate = ratePerSecond;
-                            editingStatDecaySlider = getSliderFromDecayRate(ratePerSecond);
+                            statDecayRate = ratePerSecond;
+                            statDecaySlider = getSliderFromDecayRate(ratePerSecond);
                             
                             // Update the time display value when the rate changes
                             const minutes = getTimeToFullFromRate(ratePerSecond);
-                            if (editingTimeUnit === 'minute') {
-                              editingTimeDisplayValue = Math.round(minutes);
-                            } else if (editingTimeUnit === 'hour') {
-                              editingTimeDisplayValue = Math.round(minutes / 60);
-                            } else if (editingTimeUnit === 'day') {
-                              editingTimeDisplayValue = Math.round(minutes / 1440);
+                            if (timeUnit === 'minute') {
+                              timeDisplayValue = Math.round(minutes);
+                            } else if (timeUnit === 'hour') {
+                              timeDisplayValue = Math.round(minutes / 60);
+                            } else if (timeUnit === 'day') {
+                              timeDisplayValue = Math.round(minutes / 1440);
                             }
                             
-                            editingRateDisplayValue = value;
+                            rateDisplayValue = value;
                           }
                         }}
                       />
                       <select 
-                        id="rateUnitEdit" 
+                        id="rateUnit" 
                         class="select select-bordered w-32"
-                        bind:value={editingRateUnit}
+                        bind:value={rateUnit}
                         on:change={(e) => {
                           const unit = e.target.value;
                           let displayValue;
                           
                           if (unit === 'second') {
-                            displayValue = Math.round(editingStatDecayRate);
+                            displayValue = Math.round(statDecayRate);
                           } else if (unit === 'minute') {
-                            displayValue = Math.round(editingStatDecayRate * 60);
+                            displayValue = Math.round(statDecayRate * 60);
                           } else if (unit === 'hour') {
-                            displayValue = Math.round(editingStatDecayRate * 3600);
+                            displayValue = Math.round(statDecayRate * 3600);
                           } else if (unit === 'day') {
-                            displayValue = Math.round(editingStatDecayRate * 86400);
+                            displayValue = Math.round(statDecayRate * 86400);
                           }
                           
-                          editingRateDisplayValue = displayValue;
+                          rateDisplayValue = displayValue;
                         }}
                       >
                         <option value="second">Per second</option>
@@ -1119,7 +867,7 @@ function selectSuggestion(suggestion) {
                   
                   <div class="form-control w-full mt-3">
                     <label class="label">
-                      <span class="label-text">Time to fully {editingStatIsGrowth ? 'grow' : 'decay'}</span>
+                      <span class="label-text">Time to fully {statIsGrowth ? 'grow' : 'decay'}</span>
                     </label>
                     <div class="flex gap-2">
                       <input 
@@ -1128,10 +876,10 @@ function selectSuggestion(suggestion) {
                         inputmode="numeric"
                         placeholder="Time" 
                         class="input input-bordered w-full max-w-xs flex-1" 
-                        value={editingTimeDisplayValue}
+                        value={timeDisplayValue}
                         on:change={(e) => {
                           const value = parseInt(e.target.value, 10) || 0;
-                          const unit = document.getElementById('timeUnitEdit').value;
+                          const unit = document.getElementById('timeUnit').value;
                           let minutes;
                           
                           if (unit === 'minute') {
@@ -1144,38 +892,38 @@ function selectSuggestion(suggestion) {
                           
                           if (minutes) {
                             const newRate = getRateFromTimeToFull(minutes);
-                            editingStatDecayRate = newRate;
-                            editingStatDecaySlider = getSliderFromDecayRate(newRate);
+                            statDecayRate = newRate;
+                            statDecaySlider = getSliderFromDecayRate(newRate);
                             
                             // Update the rate display value when time is changed
-                            if (editingRateUnit === 'second') {
-                              editingRateDisplayValue = Math.round(newRate);
-                            } else if (editingRateUnit === 'minute') {
-                              editingRateDisplayValue = Math.round(newRate * 60);
-                            } else if (editingRateUnit === 'hour') {
-                              editingRateDisplayValue = Math.round(newRate * 3600);
-                            } else if (editingRateUnit === 'day') {
-                              editingRateDisplayValue = Math.round(newRate * 86400);
+                            if (rateUnit === 'second') {
+                              rateDisplayValue = Math.round(newRate);
+                            } else if (rateUnit === 'minute') {
+                              rateDisplayValue = Math.round(newRate * 60);
+                            } else if (rateUnit === 'hour') {
+                              rateDisplayValue = Math.round(newRate * 3600);
+                            } else if (rateUnit === 'day') {
+                              rateDisplayValue = Math.round(newRate * 86400);
                             }
                             
-                            editingTimeDisplayValue = value;
+                            timeDisplayValue = value;
                           }
                         }}
                       />
                       <select 
-                        id="timeUnitEdit" 
+                        id="timeUnit" 
                         class="select select-bordered w-32" 
-                        bind:value={editingTimeUnit}
+                        bind:value={timeUnit}
                         on:change={(e) => {
                           const unit = e.target.value;
-                          const minutes = getTimeToFullFromRate(editingStatDecayRate);
+                          const minutes = getTimeToFullFromRate(statDecayRate);
                           
                           if (unit === 'minute') {
-                            editingTimeDisplayValue = Math.round(minutes);
+                            timeDisplayValue = Math.round(minutes);
                           } else if (unit === 'hour') {
-                            editingTimeDisplayValue = Math.round(minutes / 60);
+                            timeDisplayValue = Math.round(minutes / 60);
                           } else if (unit === 'day') {
-                            editingTimeDisplayValue = Math.round(minutes / 1440);
+                            timeDisplayValue = Math.round(minutes / 1440);
                           }
                         }}
                       >
@@ -1190,13 +938,13 @@ function selectSuggestion(suggestion) {
             </div>
             <input 
               type="range" 
-              id="editDecaySlider" 
+              id="statDecaySlider" 
               min="0" 
               max="300" 
               step="1" 
-              bind:value={editingStatDecaySlider} 
-              on:input={handleEditDecaySliderChange}
-              class="range {editingStatIsGrowth ? 'range-success' : 'range-error'}"
+              bind:value={statDecaySlider} 
+              on:input={handleDecaySliderChange}
+              class="range {statIsGrowth ? 'range-success' : 'range-error'}"
             />
             <div class="flex justify-between text-xs text-base-content opacity-70 px-1 mt-1">
               <span>Infinite</span>
@@ -1209,7 +957,7 @@ function selectSuggestion(suggestion) {
           
           <!-- Combined information box -->
           <div class="bg-base-300 rounded-md p-4 mb-2">
-            {#if editingStatDecayRate === 0}
+            {#if statDecayRate === 0}
               <div class="flex items-center gap-3">
                 <div class="badge badge-lg badge-neutral">Infinite</div>
                 <p class="text-sm">This stat will not change over time</p>
@@ -1217,13 +965,30 @@ function selectSuggestion(suggestion) {
             {:else}
               <div class="flex items-center gap-3">
                 <p class="text-sm">
-                  <span class="font-semibold">{getTimeDescription(getTimeToFullFromRate(editingStatDecayRate))}</span> to 
-                  {editingStatIsGrowth ? 'fully grow' : 'fully decay'}
+                  <span class="font-semibold">{getTimeDescription(getTimeToFullFromRate(statDecayRate))}</span> to 
+                  {statIsGrowth ? 'fully grow' : 'fully decay'}
                 </p>
               </div>
             {/if}
           </div>
         </div>
+        
+        {#if !isEditMode}
+          <div>
+            <p class="text-sm font-medium mb-2">Suggested Stats:</p>
+            <div class="flex flex-wrap gap-2">
+              {#each suggestedStats as suggestion}
+                <button 
+                  type="button"
+                  class="badge badge-outline hover:bg-primary hover:text-primary-content transition-colors cursor-pointer p-3"
+                  on:click={() => statName = suggestion}
+                >
+                  {suggestion}
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/if}
         
         {#if errorMessage}
           <div class="alert alert-error mt-3 text-sm">
@@ -1236,7 +1001,7 @@ function selectSuggestion(suggestion) {
           <button 
             type="button" 
             class="btn btn-ghost" 
-            on:click={closeEditStatModal}
+            on:click={closeStatModal}
             disabled={loading}
           >
             Cancel
@@ -1244,9 +1009,9 @@ function selectSuggestion(suggestion) {
           <button 
             type="submit" 
             class="btn btn-primary" 
-            disabled={loading}
+            disabled={loading || (!isEditMode && !statName.trim())}
           >
-            {loading ? 'Saving...' : 'Save Changes'}
+            {loading ? (isEditMode ? 'Saving...' : 'Creating...') : (isEditMode ? 'Save Changes' : 'Create Stat')}
           </button>
         </div>
       </form>
