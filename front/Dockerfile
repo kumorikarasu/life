@@ -17,6 +17,9 @@ from node:20 as build
 
 WORKDIR /app
 
+ENV NODE_ENV=production
+ENV PORT=80
+
 COPY package.json /app
 COPY package-lock.json /app
 RUN npm install
