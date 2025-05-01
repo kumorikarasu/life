@@ -37,6 +37,11 @@ let sortDescending = true;
 // Track whether sliders are currently being dragged
 let isCreateSliderDragging = false;
 let isEditSliderDragging = false;
+// For displaying formatted values in edit modal
+let editingRateDisplayValue = 0; // For the displayed rate in the selected unit
+let editingRateUnit = "minute"; // Default unit for rate
+let editingTimeDisplayValue = 0; // For the displayed time in the selected unit
+let editingTimeUnit = "minute"; // Default unit for time
 
 // Local storage keys
 const AUTO_SORT_STORAGE_KEY = 'simBru_autoSortEnabled';
@@ -387,6 +392,29 @@ function handleEditDecaySliderChange(event) {
   const sliderValue = parseFloat(event.target.value);
   editingStatDecaySlider = sliderValue;
   editingStatDecayRate = getDecayRateFromSlider(sliderValue);
+  
+  // Update the displayed rate value based on selected unit
+  if (editingRateUnit === 'second') {
+    editingRateDisplayValue = Math.round(editingStatDecayRate);
+  } else if (editingRateUnit === 'minute') {
+    editingRateDisplayValue = Math.round(editingStatDecayRate * 60);
+  } else if (editingRateUnit === 'hour') {
+    editingRateDisplayValue = Math.round(editingStatDecayRate * 3600);
+  } else if (editingRateUnit === 'day') {
+    editingRateDisplayValue = Math.round(editingStatDecayRate * 86400);
+  }
+  
+  // Update the displayed time value
+  const minutes = getTimeToFullFromRate(editingStatDecayRate);
+  if (editingTimeUnit === 'minute') {
+    editingTimeDisplayValue = Math.round(minutes);
+  } else if (editingTimeUnit === 'hour') {
+    editingTimeDisplayValue = Math.round(minutes / 60);
+  } else if (editingTimeUnit === 'day') {
+    editingTimeDisplayValue = Math.round(minutes / 1440);
+  } else {
+    editingTimeDisplayValue = Math.round(minutes);
+  }
 }
 
 // Function to handle creating a new stat
@@ -461,6 +489,14 @@ function openEditStatModal(statName) {
     editingStatIsGrowth = stat.decay_rate < 0;
     editingStatDecayRate = absDecayRate;
     editingStatDecaySlider = getSliderFromDecayRate(absDecayRate);
+    
+    // Set default unit to minute and calculate initial display values
+    editingRateUnit = "minute";
+    editingRateDisplayValue = Math.round(absDecayRate * 60); // Default to per minute
+    
+    // Initialize time values as well
+    editingTimeUnit = "minute";
+    editingTimeDisplayValue = Math.round(getTimeToFullFromRate(absDecayRate));
     
     showEditStatModal = true;
   }
@@ -804,7 +840,7 @@ function selectSuggestion(suggestion) {
                         min="0.001" 
                         step="0.01" 
                         placeholder="Rate" 
-                        class="input input-bordered w-full" 
+                        class="input input-bordered w-full max-w-xs flex-1" 
                         on:change={(e) => {
                           const value = parseFloat(e.target.value);
                           const unit = document.getElementById('rateUnitCreate').value;
@@ -828,7 +864,7 @@ function selectSuggestion(suggestion) {
                       />
                       <select 
                         id="rateUnitCreate" 
-                        class="select select-bordered" 
+                        class="select select-bordered w-24" 
                         defaultValue="minute"
                       >
                         <option value="second">Per second</option>
@@ -845,13 +881,13 @@ function selectSuggestion(suggestion) {
                     </label>
                     <div class="flex gap-2">
                       <input 
-                        type="number" 
-                        min="1" 
-                        step="1" 
+                        type="text" 
+                        pattern="[0-9]*" 
+                        inputmode="numeric"
                         placeholder="Time" 
-                        class="input input-bordered w-full" 
+                        class="input input-bordered w-full max-w-xs flex-1" 
                         on:change={(e) => {
-                          const value = parseFloat(e.target.value);
+                          const value = parseInt(e.target.value, 10) || 0;
                           const unit = document.getElementById('timeUnitCreate').value;
                           let minutes;
                           
@@ -872,7 +908,7 @@ function selectSuggestion(suggestion) {
                       />
                       <select 
                         id="timeUnitCreate" 
-                        class="select select-bordered" 
+                        class="select select-bordered w-24" 
                         defaultValue="minute"
                       >
                         <option value="minute">Minutes</option>
@@ -1013,13 +1049,14 @@ function selectSuggestion(suggestion) {
                     </label>
                     <div class="flex gap-2">
                       <input 
-                        type="number" 
-                        min="0.001" 
-                        step="0.01" 
+                        type="text" 
+                        pattern="[0-9]*" 
+                        inputmode="numeric"
                         placeholder="Rate" 
-                        class="input input-bordered w-full" 
+                        class="input input-bordered w-full max-w-xs flex-1"
+                        value={editingRateDisplayValue}
                         on:change={(e) => {
-                          const value = parseFloat(e.target.value);
+                          const value = parseInt(e.target.value, 10) || 0;
                           const unit = document.getElementById('rateUnitEdit').value;
                           let ratePerSecond;
                           
@@ -1036,13 +1073,41 @@ function selectSuggestion(suggestion) {
                           if (ratePerSecond) {
                             editingStatDecayRate = ratePerSecond;
                             editingStatDecaySlider = getSliderFromDecayRate(ratePerSecond);
+                            
+                            // Update the time display value when the rate changes
+                            const minutes = getTimeToFullFromRate(ratePerSecond);
+                            if (editingTimeUnit === 'minute') {
+                              editingTimeDisplayValue = Math.round(minutes);
+                            } else if (editingTimeUnit === 'hour') {
+                              editingTimeDisplayValue = Math.round(minutes / 60);
+                            } else if (editingTimeUnit === 'day') {
+                              editingTimeDisplayValue = Math.round(minutes / 1440);
+                            }
+                            
+                            editingRateDisplayValue = value;
                           }
                         }}
                       />
                       <select 
                         id="rateUnitEdit" 
-                        class="select select-bordered" 
-                        defaultValue="minute"
+                        class="select select-bordered w-32"
+                        bind:value={editingRateUnit}
+                        on:change={(e) => {
+                          const unit = e.target.value;
+                          let displayValue;
+                          
+                          if (unit === 'second') {
+                            displayValue = Math.round(editingStatDecayRate);
+                          } else if (unit === 'minute') {
+                            displayValue = Math.round(editingStatDecayRate * 60);
+                          } else if (unit === 'hour') {
+                            displayValue = Math.round(editingStatDecayRate * 3600);
+                          } else if (unit === 'day') {
+                            displayValue = Math.round(editingStatDecayRate * 86400);
+                          }
+                          
+                          editingRateDisplayValue = displayValue;
+                        }}
                       >
                         <option value="second">Per second</option>
                         <option value="minute">Per minute</option>
@@ -1058,13 +1123,14 @@ function selectSuggestion(suggestion) {
                     </label>
                     <div class="flex gap-2">
                       <input 
-                        type="number" 
-                        min="1" 
-                        step="1" 
+                        type="text" 
+                        pattern="[0-9]*" 
+                        inputmode="numeric"
                         placeholder="Time" 
-                        class="input input-bordered w-full" 
+                        class="input input-bordered w-full max-w-xs flex-1" 
+                        value={editingTimeDisplayValue}
                         on:change={(e) => {
-                          const value = parseFloat(e.target.value);
+                          const value = parseInt(e.target.value, 10) || 0;
                           const unit = document.getElementById('timeUnitEdit').value;
                           let minutes;
                           
@@ -1080,13 +1146,38 @@ function selectSuggestion(suggestion) {
                             const newRate = getRateFromTimeToFull(minutes);
                             editingStatDecayRate = newRate;
                             editingStatDecaySlider = getSliderFromDecayRate(newRate);
+                            
+                            // Update the rate display value when time is changed
+                            if (editingRateUnit === 'second') {
+                              editingRateDisplayValue = Math.round(newRate);
+                            } else if (editingRateUnit === 'minute') {
+                              editingRateDisplayValue = Math.round(newRate * 60);
+                            } else if (editingRateUnit === 'hour') {
+                              editingRateDisplayValue = Math.round(newRate * 3600);
+                            } else if (editingRateUnit === 'day') {
+                              editingRateDisplayValue = Math.round(newRate * 86400);
+                            }
+                            
+                            editingTimeDisplayValue = value;
                           }
                         }}
                       />
                       <select 
                         id="timeUnitEdit" 
-                        class="select select-bordered" 
-                        defaultValue="minute"
+                        class="select select-bordered w-32" 
+                        bind:value={editingTimeUnit}
+                        on:change={(e) => {
+                          const unit = e.target.value;
+                          const minutes = getTimeToFullFromRate(editingStatDecayRate);
+                          
+                          if (unit === 'minute') {
+                            editingTimeDisplayValue = Math.round(minutes);
+                          } else if (unit === 'hour') {
+                            editingTimeDisplayValue = Math.round(minutes / 60);
+                          } else if (unit === 'day') {
+                            editingTimeDisplayValue = Math.round(minutes / 1440);
+                          }
+                        }}
                       >
                         <option value="minute">Minutes</option>
                         <option value="hour">Hours</option>
