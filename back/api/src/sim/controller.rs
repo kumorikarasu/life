@@ -1,5 +1,3 @@
-use std::sync::Mutex;
-
 use actix_web::{HttpResponse, error};
 use actix_web::{get, post, delete, put, web::Data, Result, web::Path, Responder, web::Json};
 
@@ -41,7 +39,7 @@ pub async fn get_logged_in_user_sims(service: Data<SimService>, user: Authentica
 }
 
 #[post("")]
-pub async fn post_sim(service: Data<SimService>, mut payload: Json<Sim>, user: AuthenticatedUser) -> Result<impl Responder> {
+pub async fn post_sim(service: Data<SimService>, payload: Json<Sim>, user: AuthenticatedUser) -> Result<impl Responder> {
     let mut sim = payload.into_inner();
     // Set the user_id from the authenticated user
     sim.user_id = user.id;

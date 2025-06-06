@@ -9,6 +9,7 @@
   export let draggable: boolean = false
   export let index: number = 0
   export let totalStats: number = 1
+  
   let bg = '#333'
   
   // Initialize currentValue with the provided value
@@ -17,7 +18,6 @@
   // Visual representation of decaying value (doesn't affect actual backend value)
   let visualValue = value
   let decayInterval: number | null = null
-  let timeSinceLastDecay = 0
   let lastUpdateTime = Date.now()
   let lastSyncTime = Date.now()
   let valueHasChanged = false
@@ -32,10 +32,6 @@
   let isDragging = false
   let dragStartY = 0
   let dragStartX = 0
-  let currentDragY = 0
-  let currentDragX = 0
-  let initialY = 0
-  let initialX = 0
   let translateY = 0
   let translateX = 0
   let containerHeight = 0
@@ -49,29 +45,6 @@
     currentValue = value;
     visualValue = value;
     lastUpdateTime = Date.now();
-    timeSinceLastDecay = 0;
-  }
-  
-  // Function to get human-readable description of decay rate
-  function getDecayRateDescription(decayRate) {
-    // Check for infinite (no decay)
-    if (decayRate === 0) {
-      return "Infinite";
-    }
-    // Format the decay rate based on its magnitude
-    else if (decayRate >= 1) {
-      // More than 1 per second
-      return `${decayRate.toFixed(1)} per second`;
-    } else if (decayRate >= 1/60) {
-      // More than 1 per minute
-      return `${(decayRate * 60).toFixed(1)} per minute`;
-    } else if (decayRate >= 1/3600) {
-      // More than 1 per hour
-      return `${(decayRate * 3600).toFixed(1)} per hour`;
-    } else {
-      // Per day
-      return `${(decayRate * 86400).toFixed(1)} per day`;
-    }
   }
   
   function handleInput(event) {
@@ -86,7 +59,6 @@
     
     // Reset decay timers when manually adjusting
     lastUpdateTime = Date.now();
-    timeSinceLastDecay = 0;
   }
   
   function handleChange() {
@@ -125,16 +97,12 @@
     
     // Get initial position to track movement
     const container = event.target.closest('.stat-container');
-    initialY = container.getBoundingClientRect().top;
-    initialX = container.getBoundingClientRect().left;
     containerHeight = container.offsetHeight;
     
     // Set dragging state
     isDragging = true;
     dragStartY = event.clientY;
     dragStartX = event.clientX;
-    currentDragY = event.clientY;
-    currentDragX = event.clientX;
     translateY = 0;
     translateX = 0;
     dragTargetIndex = null;
@@ -151,8 +119,8 @@
     if (!isDragging) return;
     
     // Update position for dynamic movement in both X and Y directions
-    currentDragY = event.clientY;
-    currentDragX = event.clientX;
+    const currentDragY = event.clientY;
+    const currentDragX = event.clientX;
     translateY = currentDragY - dragStartY;
     translateX = currentDragX - dragStartX;
     
@@ -254,9 +222,6 @@
       const deltaTime = (now - lastUpdateTime) / 1000; // Convert to seconds
       lastUpdateTime = now;
       
-      // Accumulate time since last decay
-      timeSinceLastDecay += deltaTime;
-      
       // Skip decay calculation if decay_rate is 0 (infinite)
       if (decay_rate === 0) {
         return;
@@ -302,13 +267,6 @@
       window.clearInterval(decayInterval);
       decayInterval = null;
     }
-  }
-  
-  // Reset visual decay to actual value
-  function resetVisualValue() {
-    visualValue = value;
-    lastUpdateTime = Date.now();
-    timeSinceLastDecay = 0;
   }
 </script>
 
@@ -444,14 +402,6 @@
   
   .cursor-grabbing {
     cursor: grabbing;
-  }
-  
-  .drag-up {
-    box-shadow: 0 -4px 10px rgba(0, 0, 255, 0.2);
-  }
-  
-  .drag-down {
-    box-shadow: 0 4px 10px rgba(0, 0, 255, 0.2);
   }
   
   .drag-target {

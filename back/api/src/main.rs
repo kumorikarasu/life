@@ -1,12 +1,7 @@
-//#![feature(trace_macros)]
-//trace_macros!(true);
-
 use actix_cors::Cors;
 use actix_session::{Session, SessionMiddleware};
-use actix_web::{cookie::Key, get};
-#[allow(unused)]
+use actix_web::{cookie::Key, get, App, HttpServer, web, middleware::Logger};
 
-use actix_web::{App, HttpServer, web, middleware::Logger};
 mod entities;
 mod sim;
 mod dto;
@@ -39,16 +34,6 @@ async fn main() -> std::io::Result<()> {
     // Initialize services
     let sim_service = sim::service(db.clone());
     let auth_service = auth::service(db.clone());
-
-    // Setup a tokio task that will run the decay function every minute
-    /*
-    actix_web::rt::spawn(async move {
-        loop {
-            actix_web::rt::time::sleep(std::time::Duration::from_secs(60)).await;
-            sim_service_clone.run_decay(60.0).await.unwrap();
-        }
-    });
-    */
 
     HttpServer::new(move || {
         let cors = Cors::permissive();
@@ -86,10 +71,7 @@ async fn main() -> std::io::Result<()> {
 async fn default(session: Session) -> String {
     let g = session.get::<String>("csrf_token").unwrap().unwrap_or("None".to_string());
     println!("Session {:?}", session.entries());
-
     println!("Session key: {:?}", g);
-
-    //session.insert("key", "value").unwrap();
     format!("Hello world! {:?}", g)
 }
 
