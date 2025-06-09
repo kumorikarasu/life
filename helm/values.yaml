@@ -2,18 +2,62 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
-replicaCount: 1
+api:
+  replicaCount: 1
+  image:
+    repository: "registry.home.ryougi.ca/simbru-api"
+    pullPolicy: Always
+    tag: ""
+  env: 
+    POSTGRES_CONNECTION_STRING: ""
+    OAUTH_CLIENT_ID: ""
+    OAUTH_CLIENT_SECRET: ""
+    OAUTH_REDIRECT_URL: ""
 
-env: 
-  OAUTH_CLIENT_ID: ""
-  OAUTH_CLIENT_SECRET: ""
-  OAUTH_REDIRECT_URL: "https://your-domain.com/auth/callback"
+  service:
+    type: ClusterIP
+    port: 8000
+  ingress:
+    enabled: true
+    className: "nginx"
+    hosts:
+      - host: simbru-api.home.ryougi.ca
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+      - host: simbru-api.ryougi.ca
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
 
-image:
-  repository: "simbruna"
-  pullPolicy: Always
-  # Overrides the image tag whose default is the chart appVersion.
-  tag: ""
+# Values that can be provided by SOPS secrets
+oauth_client_id: ""
+oauth_client_secret: ""
+oauth_redirect_url: "https://simbru.ryougi.ca/auth/callback"
+postgres_connection_string: ""
+postgres_app_password: ""
+
+frontend:
+  replicaCount: 1
+  image:
+    repository: "registry.home.ryougi.ca/simbru-pwa"
+    pullPolicy: Always
+    tag: ""
+  service:
+    type: ClusterIP
+    port: 80
+  ingress:
+    enabled: true
+    className: "nginx"
+    hosts:
+      - host: simbru.home.ryougi.ca
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+      - host: simbru.ryougi.ca
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
 
 imagePullSecrets: []
 nameOverride: ""

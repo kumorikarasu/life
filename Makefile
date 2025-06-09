@@ -79,3 +79,17 @@ decrypt:
 	@echo "Decrypting secrets for deployment"
 	sops -d front/env/.env.enc.production > front/env/.env.production
 	@echo "Copy the decrypted file to .env.local for running locally"
+
+test-helm:
+	@echo "Running Helm chart validation tests..."
+	cd tests && cargo test helm_chart_tests
+	@echo "✅ Helm chart tests passed!"
+
+test-api:
+	@echo "API tests not implemented yet"
+
+test-frontend:
+	@echo "Frontend tests not implemented yet"
+
+test: test-helm test-api test-frontend
+	@echo "✅ All tests passed!"
