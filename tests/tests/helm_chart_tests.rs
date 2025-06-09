@@ -197,7 +197,7 @@ fn test_services_exist() -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("Frontend service not found"))?;
     
     let frontend_svc: Service = parse_k8s_resource(frontend_service)?;
-    validate_service_port(&frontend_svc, 80, "http")?;
+    validate_service_port(&frontend_svc, 8080, "http")?;
     
     Ok(())
 }

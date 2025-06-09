@@ -82,7 +82,7 @@ decrypt:
 
 test-helm:
 	@echo "Running Helm chart validation tests..."
-	cd tests && cargo test helm_chart_tests
+	cd tests && cargo test --test helm_chart_tests
 	@echo "✅ Helm chart tests passed!"
 
 test-api:
