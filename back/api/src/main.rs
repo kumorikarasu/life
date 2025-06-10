@@ -6,6 +6,7 @@ mod entities;
 mod sim;
 mod dto;
 mod auth;
+mod config;
 
 use auth::middleware::AuthMiddleware;
 use sea_orm::DatabaseConnection;
@@ -59,6 +60,10 @@ async fn main() -> std::io::Result<()> {
                             .wrap(AuthMiddleware::new())
                             .app_data(web::Data::new(sim_service.clone()))
                             .configure(sim::configure)
+                    )
+                    .service(
+                        web::scope("/config")
+                            .configure(config::configure)
                     )
             )
     })

@@ -48,17 +48,17 @@ spec:
             - name: OAUTH_CLIENT_ID
               valueFrom:
                 secretKeyRef:
-                  name: life-oauth-secrets
+                  name: {{ include "simbruna.fullname" . }}-oauth-secrets
                   key: client-id
             - name: OAUTH_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: life-oauth-secrets
+                  name: {{ include "simbruna.fullname" . }}-oauth-secrets
                   key: client-secret
             - name: OAUTH_REDIRECT_URL
               valueFrom:
                 secretKeyRef:
-                  name: life-oauth-secrets
+                  name: {{ include "simbruna.fullname" . }}-oauth-secrets
                   key: redirect-url
           ports:
             - name: http
