@@ -96,8 +96,7 @@ jobs:
         cd argocd-repo
         
         # Update the life app-apps values with new image tags
-        sed -i "/api:/,/frontend:/ s/tag: \".*\"/tag: \"${{ steps.vars.outputs.short_sha }}\"/" argocd/app-apps/life/values.yaml
-        sed -i "/frontend:/,$ s/tag: \".*\"/tag: \"${{ steps.vars.outputs.short_sha }}\"/" argocd/app-apps/life/values.yaml
+        sed -i "/life:/,$ s/tag: \".*\"/tag: \"${{ steps.vars.outputs.short_sha }}\"/" argocd/app-apps/life/values.yaml
         
         # Commit and push changes
         git config user.name "github-actions[bot]"
